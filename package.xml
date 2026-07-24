@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>fair_ros</name>
+  <version>0.1.0</version>
+  <description>
+    Make ROS 2 field mission data FAIR-compliant with zero friction:
+    automatic context capture, plain-language briefings, RO-Crate archives.
+  </description>
+  <maintainer email="fleet@example.org">fair-ros contributors</maintainer>
+  <license>Apache-2.0</license>
+
+  <depend>ros2cli</depend>
+  <depend>ros2bag</depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>python3-pydantic</exec_depend>
+  <exec_depend>python3-rich</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>python3-inotify-simple-pip</exec_depend>
+  <exec_depend>python3-mcap-pip</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

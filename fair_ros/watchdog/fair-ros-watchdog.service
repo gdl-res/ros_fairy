@@ -1,0 +1,28 @@
+[Unit]
+Description=fair-ros recording assistant (mission context watchdog)
+Documentation=https://github.com/example/fair-ros
+After=local-fs.target
+
+[Service]
+Type=simple
+# ROS 2 environment captured at `ros2 fair setup` (PATH, AMENT_PREFIX_PATH,
+# ROS_DOMAIN_ID, RMW_IMPLEMENTATION, ...). Without it the service has no ROS on
+# PATH and the graph/description harvest fails. `-` makes it optional so the
+# watchdog still starts (and watches the spool) on a robot set up before this
+# file existed. Re-run `ros2 fair setup` to (re)generate it. At mission time the
+# watchdog also adopts the recording shell's DDS discovery settings (domain,
+# RMW) from <spool>/session.env (written by mission_start/mission_record), so a
+# domain or RMW that drifted from this frozen snapshot still harvests the right
+# graph. Loader paths from that group-writable file are never trusted.
+EnvironmentFile=-/etc/fair-ros/watchdog.env
+ExecStart=/usr/bin/python3 -m fair_ros.watchdog.watchdog
+Restart=always
+RestartSec=5
+# The watchdog must keep working when ROS 2 / Docker are down; it only needs
+# the spool. Run as root group fair-ros so operators can read the spool.
+Group=fair-ros
+UMask=0002
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

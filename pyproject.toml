@@ -1,0 +1,36 @@
+# Project metadata lives in setup.py (ament_python build). This file declares
+# the PEP 517 build backend and configures the dev tooling (ruff, mypy, pytest).
+
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+extend-exclude = ["build", "dist"]
+
+[tool.ruff.lint]
+# pycodestyle (E/W), pyflakes (F), isort (I), pyupgrade (UP), bugbear (B).
+select = ["E", "W", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true   # ros2cli, inotify_simple, rocrate have no stubs
+exclude = ["build", "dist", "tests"]
+
+# The installed `mcap` package confuses mypy's module resolution ("source file
+# found twice"); we only use it behind runtime guards, so don't analyse it.
+[[tool.mypy.overrides]]
+module = "mcap.*"
+follow_imports = "skip"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Live-ROS smoke tests are deselected by default so the no-ROS suite (and CI)
+# stays clean. Run them on a sourced ROS 2 box with: pytest -m ros
+addopts = ["-m", "not ros"]
+markers = [
+    "ros: integration test requiring a live, sourced ROS 2 environment (deselected by default; run with `pytest -m ros`). See docs/real-robot-smoke-test.md.",
+]
