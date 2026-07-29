@@ -11,7 +11,7 @@
 
 ## What it is
 
-`fair_ros` is a ROS 2 CLI extension (`ros2 fair ...`) plus a background watchdog
+`fair_ros` is a ROS 2 CLI extension (`ros2 fairy ...`) plus a background watchdog
 service. An operator answers five questions before a run; everything else —
 robot identity, ROS graph and node descriptions, sensors seen publishing,
 Python environment, Docker images, hardware devices, system info — is harvested
@@ -24,21 +24,21 @@ verified, diffed, and shared as a single checksummed file.
 Build it into a ROS 2 workspace (`ament_python`, ROS 2 Humble/Jazzy or newer):
 
 ```bash
-cd ~/ros2_ws/src && git clone https://github.com/gdl-res/ROS-FAIRy.git
+cd ~/ros2_ws/src && git clone https://github.com/gdl-res/ros_fairy.git
 cd ~/ros2_ws && colcon build --packages-select fair_ros
 source install/setup.bash
-sudo ros2 fair setup          # identity file, directories, watchdog service
-ros2 fair doctor              # confirm the robot is ready to capture
+sudo ros2 fairy setup          # identity file, directories, watchdog service
+ros2 fairy doctor              # confirm the robot is ready to capture
 ```
 
 ## A mission, start to finish
 
 ```bash
-ros2 fair mission_start       # five questions describing the run
-ros2 fair mission_record      # wraps `ros2 bag record` with safety checks
-ros2 fair mission_close       # review the briefing, then save or discard
-ros2 fair list                # missions saved on this robot
-ros2 fair export 1            # bundle the newest mission + sha256 sidecar
+ros2 fairy mission_start       # five questions describing the run
+ros2 fairy mission_record      # wraps `ros2 bag record` with safety checks
+ros2 fairy mission_close       # review the briefing, then save or discard
+ros2 fairy list                # missions saved on this robot
+ros2 fairy export 1            # bundle the newest mission + sha256 sidecar
 ```
 
 ## Commands

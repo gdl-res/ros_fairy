@@ -1,4 +1,4 @@
-"""Rendering tests for ui/diff.py (the rich table view of ros2 fair diff).
+"""Rendering tests for ui/diff.py (the rich table view of ros2 fairy diff).
 
 The --json path is covered in test_subcommands; these exercise the rendered
 sections, the added/removed/changed row convention, the graph-row cap, and

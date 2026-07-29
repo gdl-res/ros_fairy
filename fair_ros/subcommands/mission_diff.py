@@ -1,4 +1,4 @@
-"""ros2 fair diff — compare two saved missions."""
+"""ros2 fairy diff — compare two saved missions."""
 
 import json
 

@@ -1,6 +1,6 @@
 """SQLite mission index.
 
-The index is a query cache for `ros2 fair list`; the archive directories'
+The index is a query cache for `ros2 fairy list`; the archive directories'
 mission_record.json files are the source of truth, and reindex() can rebuild
 the database from them at any time.
 """

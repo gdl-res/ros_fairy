@@ -12,7 +12,7 @@ but inter-message spacing is fabricated (spread evenly over the chosen duration)
 Good for inspection/playback; not for time-critical processing. The only real fix
 is to sync the clock before recording.
 
-Shared by ``ros2 fair repair`` and ``tools/restamp_bag.py``.
+Shared by ``ros2 fairy repair`` and ``tools/restamp_bag.py``.
 """
 
 import copy

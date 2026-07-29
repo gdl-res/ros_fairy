@@ -1,4 +1,4 @@
-"""ros2 fair list — table of saved missions from the SQLite index."""
+"""ros2 fairy list — table of saved missions from the SQLite index."""
 
 import json
 from datetime import datetime

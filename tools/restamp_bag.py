@@ -2,7 +2,7 @@
 """Re-stamp an MCAP rosbag2 bag whose recording clock was broken.
 
 Standalone wrapper around ``fair_ros.utils.bag_repair`` for use outside a ROS
-environment. Prefer ``ros2 fair repair`` when fair-ros is installed and sourced;
+environment. Prefer ``ros2 fairy repair`` when fair-ros is installed and sourced;
 this script is handy for a bare bag directory on any machine with the package
 importable.
 

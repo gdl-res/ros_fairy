@@ -1,4 +1,4 @@
-"""ros2 fair reindex — rebuild the mission index from the archives on disk.
+"""ros2 fairy reindex — rebuild the mission index from the archives on disk.
 
 The SQLite index is a cache over the archive directory; if it is lost, stale,
 or was written before a permissions fix, this verb regenerates it by scanning
@@ -36,7 +36,7 @@ def run(args, console: Console | None = None) -> int:
     else:
         plural = "mission" if count == 1 else "missions"
         console.print(f"Rebuilt the mission list: {count} saved {plural} "
-                      "found. `ros2 fair list` is up to date.")
+                      "found. `ros2 fairy list` is up to date.")
     return 0
 
 

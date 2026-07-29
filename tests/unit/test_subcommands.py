@@ -113,7 +113,7 @@ def test_clock_is_synchronized_parsing():
 
 def test_clock_warning_points_to_repair():
     # the bad-clock warning routes the operator to the recovery path (#27)
-    assert "ros2 fair repair" in clock.WARNING
+    assert "ros2 fairy repair" in clock.WARNING
 
 
 def test_mission_record_aborts_on_unsynced_clock(fair_dirs):
@@ -595,7 +595,7 @@ def test_doctor_service_harvest_distinguishes_service_context():
             wd, "read_state",
             return_value={"harvest_status": {"ros_graph": "failed"}}):
         c = doctor._check_service_harvest()
-        assert c["status"] == doctor.FAIL and "ros2 fair setup" in c["hint"]
+        assert c["status"] == doctor.FAIL and "ros2 fairy setup" in c["hint"]
     with mock.patch.object(wd, "read_state", return_value=None):
         assert doctor._check_service_harvest()["status"] == doctor.SKIP
 
@@ -603,7 +603,7 @@ def test_doctor_service_harvest_distinguishes_service_context():
 def test_doctor_service_env_missing_file_fails(fair_dirs):
     # watchdog.env doesn't exist → the service started blind.
     c = doctor._check_service_env()
-    assert c["status"] == doctor.FAIL and "ros2 fair setup" in c["hint"]
+    assert c["status"] == doctor.FAIL and "ros2 fairy setup" in c["hint"]
 
 
 def test_doctor_service_env_no_distro_fails(fair_dirs):
@@ -692,7 +692,7 @@ def test_setup_fails_when_ros_environment_missing(fair_dirs):
                          clear=True):
         assert setup_cmd._check_ros_visible(console) is False
     out = console.file.getvalue()
-    assert "ROS_DISTRO is unset" in out and "ros2 fair setup" in out
+    assert "ROS_DISTRO is unset" in out and "ros2 fairy setup" in out
 
 
 def test_setup_fails_when_graph_not_visible(fair_dirs):

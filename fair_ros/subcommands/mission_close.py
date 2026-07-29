@@ -1,4 +1,4 @@
-"""ros2 fair mission_close — the single save/discard decision."""
+"""ros2 fairy mission_close — the single save/discard decision."""
 
 import shutil
 import sys

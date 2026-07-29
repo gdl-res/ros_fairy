@@ -314,7 +314,7 @@ def test_poller_ignores_spool_bags(fair_dirs):
     assert not dog._is_tracked((paths.archive_dir() / "elsewhere").resolve())
 
 
-# -- ros2 fair adopt -----------------------------------------------------------
+# -- ros2 fairy adopt -----------------------------------------------------------
 
 def _seed_harvest():
     fsio.atomic_write_json(paths.harvest_json_path(), good_pipeline())

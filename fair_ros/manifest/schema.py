@@ -137,7 +137,7 @@ class HealthWarning(_Model):
     plain_text: str
 
 
-# Bag.source values for recordings made outside `ros2 fair mission_record`
+# Bag.source values for recordings made outside `ros2 fairy mission_record`
 # (referenced in place at their original path, copied into the crate at archive
 # time rather than moved).
 FOREIGN_SOURCES = frozenset({"detected", "adopted"})
@@ -148,7 +148,7 @@ class Bag(_Model):
     # How the recording entered the pipeline: "mission_record" (recorded by the
     # wrapper into the spool, moved into the crate), "detected" (found running
     # outside the wrapper by the watchdog's /proc poller) or "adopted" (ingested
-    # after the fact by `ros2 fair adopt`). The latter two are "foreign" — see
+    # after the fact by `ros2 fairy adopt`). The latter two are "foreign" — see
     # FOREIGN_SOURCES — and are referenced in place then copied, not moved.
     source: str = "mission_record"
     storage_format: str

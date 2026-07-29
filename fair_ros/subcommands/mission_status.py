@@ -1,4 +1,4 @@
-"""ros2 fair mission_status — read-only status display."""
+"""ros2 fairy mission_status — read-only status display."""
 
 import json
 

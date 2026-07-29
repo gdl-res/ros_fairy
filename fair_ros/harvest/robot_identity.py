@@ -1,6 +1,6 @@
 """Read and validate /etc/fair-ros/robot_identity.yaml.
 
-The yaml is written once by ``ros2 fair setup``. Expected structure:
+The yaml is written once by ``ros2 fairy setup``. Expected structure:
 
     robot:
       name: Heron-02

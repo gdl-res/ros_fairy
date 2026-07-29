@@ -41,12 +41,12 @@ setup(
     license="Apache-2.0",
     entry_points={
         "ros2cli.command": [
-            "fair = fair_ros.command.fair:FairCommand",
+            "fairy = fair_ros.command.fair:FairCommand",
         ],
         "ros2cli.extension_point": [
-            "fair.verb = fair_ros.subcommands:VerbExtension",
+            "fairy.verb = fair_ros.subcommands:VerbExtension",
         ],
-        "fair.verb": [
+        "fairy.verb": [
             "setup = fair_ros.subcommands.setup:SetupVerb",
             "mission_start = fair_ros.subcommands.mission_start:"
             "MissionStartVerb",

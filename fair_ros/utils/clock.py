@@ -45,5 +45,5 @@ WARNING = (
     "data may be stamped with the wrong time, which can make it unplayable and "
     "unusable later. Wait a minute for the clock to sync, if you can. If you "
     "must record now, you can re-stamp the recording afterward with "
-    "'ros2 fair repair' so it plays back correctly."
+    "'ros2 fairy repair' so it plays back correctly."
 )

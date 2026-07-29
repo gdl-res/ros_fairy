@@ -1,4 +1,4 @@
-"""ros2 fair mission_record — safe wrapper around ros2 bag record."""
+"""ros2 fairy mission_record — safe wrapper around ros2 bag record."""
 
 import shutil
 import signal
@@ -98,14 +98,14 @@ def run(args, console: Console | None = None) -> int:
         child.send_signal(signal.SIGINT)
         returncode = child.wait()
         console.print("\nRecording stopped. When the mission is over, run: "
-                      "[bold]ros2 fair mission_close[/bold]")
+                      "[bold]ros2 fairy mission_close[/bold]")
         return 0
     if returncode != 0:
         console.print("[red]Recording stopped with a problem. The data "
                       "captured so far is kept.[/red]")
         return 1
     console.print("Recording finished. When the mission is over, run: "
-                  "[bold]ros2 fair mission_close[/bold]")
+                  "[bold]ros2 fairy mission_close[/bold]")
     return 0
 
 

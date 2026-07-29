@@ -1,11 +1,11 @@
-"""ros2 fair export — package a saved mission as one portable, checksummed file.
+"""ros2 fairy export — package a saved mission as one portable, checksummed file.
 
 A mission archive is an RO-Crate *directory*; sharing it means an operator
 hand-zips it (and hopes the transfer didn't corrupt anything). This makes that a
 first-class, safe step: it bundles the crate into a single ``.zip`` (or ``.tar``)
 with a top-level folder, writes a ``sha256sum``-compatible sidecar so the
 recipient can prove the transfer, and refuses to clobber an existing file. The
-crate's own per-file checksums still let the recipient run ``ros2 fair verify``
+crate's own per-file checksums still let the recipient run ``ros2 fairy verify``
 after unpacking.
 
 Read-only with respect to the archive and index.
@@ -112,7 +112,7 @@ def run(args, console: Console | None = None) -> int:
         verify_result = "unknown"
     if verify_result == "fail":
         console.print("[yellow]Warning: this archive failed integrity checks "
-                      "(run `ros2 fair verify` for details). Exporting "
+                      "(run `ros2 fairy verify` for details). Exporting "
                       "anyway.[/yellow]")
 
     files = _bundle_files(crate)
@@ -147,7 +147,7 @@ def run(args, console: Console | None = None) -> int:
             f"{dest} [dim]({human_size(size)})[/dim]")
         console.print(f"[dim]sha256: {digest}[/dim]")
         console.print(f"[dim]checksum saved to {checksum_path.name} — the "
-                      "recipient can run `ros2 fair verify` after "
+                      "recipient can run `ros2 fairy verify` after "
                       "unpacking.[/dim]")
     return 0
 

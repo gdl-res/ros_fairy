@@ -1,4 +1,4 @@
-"""ros2cli command extension: the `ros2 fair` verb family."""
+"""ros2cli command extension: the `ros2 fairy` verb family."""
 
 try:
     from ros2cli.command import CommandExtension, add_subparsers_on_demand
@@ -18,7 +18,7 @@ class FairCommand(CommandExtension):
         if add_subparsers_on_demand is None:
             return
         add_subparsers_on_demand(
-            parser, cli_name, "_verb", "fair.verb", required=False)
+            parser, cli_name, "_verb", "fairy.verb", required=False)
 
     def main(self, *, parser, args):
         if not hasattr(args, "_verb"):

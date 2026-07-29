@@ -1,4 +1,4 @@
-"""ros2 fair setup — one-time per-robot configuration wizard.
+"""ros2 fairy setup — one-time per-robot configuration wizard.
 
 Engineer-facing: the one place where ROS jargon is acceptable. Idempotent;
 re-running shows current values as defaults.
@@ -37,7 +37,7 @@ SOURCE_RECIPE = (
     "    source /opt/ros/<distro>/setup.bash   # + the overlay/env that sets "
     "ROS_DOMAIN_ID, RMW_IMPLEMENTATION\n"
     "    ros2 node list   # must list your robot's nodes\n"
-    "    ros2 fair setup")
+    "    ros2 fairy setup")
 
 
 class SetupAborted(Exception):

@@ -244,7 +244,7 @@ def harvest_level_warnings(harvest: dict | None) -> list[str]:
     status = (harvest.get("provenance") or {}).get("harvest_status", {})
     if status.get("robot_identity") == "failed" or not harvest.get("robot"):
         warnings.append("This robot hasn't been set up yet — ask your "
-                        "engineer to run `ros2 fair setup`.")
+                        "engineer to run `ros2 fairy setup`.")
     if status.get("ros_graph") in ("failed", "timeout"):
         warnings.append("I couldn't capture the software versions and "
                         "settings because the robot software wasn't "

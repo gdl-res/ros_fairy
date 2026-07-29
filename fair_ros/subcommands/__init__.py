@@ -1,4 +1,4 @@
-"""ros2 fair verb implementations.
+"""ros2 fairy verb implementations.
 
 Each module exposes a plain ``run(args, console) -> int`` (unit-testable
 without ROS) plus a thin ros2cli VerbExtension wrapper. The shim below lets

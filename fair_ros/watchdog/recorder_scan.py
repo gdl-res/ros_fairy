@@ -1,6 +1,6 @@
 """Detect rosbag2 recorder processes started outside the spool.
 
-The watchdog's inotify only sees the spool, where ``ros2 fair mission_record``
+The watchdog's inotify only sees the spool, where ``ros2 fairy mission_record``
 records. A plain ``ros2 bag record`` in another terminal lands in the operator's
 cwd and is invisible to it. This module scans ``/proc`` for a live rosbag2
 *recorder* process and resolves where it is writing — pure ``/proc`` reading, no
@@ -12,7 +12,7 @@ therefore checked through the ``/proc/<pid>/root`` portal, and the bag directory
 is translated to the equivalent host path by matching the recorder's mount table
 against our own (``/proc/<pid>/mountinfo``). A container path the host has no
 mount for (e.g. the container's private overlay) cannot be harvested; it is
-skipped with a one-time plain-language warning pointing at ``ros2 fair adopt``.
+skipped with a one-time plain-language warning pointing at ``ros2 fairy adopt``.
 
 ``scan()`` is injected into the :class:`~fair_ros.watchdog.watchdog.Watchdog` so
 tests can fake it; the real implementation never raises (a transient
@@ -275,7 +275,7 @@ def scan() -> list[FoundRecorder]:
                     f"unreachable:{bag_dir}", logging.WARNING,
                     "a recording (%s, pid %s) is running inside a container "
                     "at a folder this computer cannot see; record into a "
-                    "shared folder, or run 'ros2 fair adopt' on the finished "
+                    "shared folder, or run 'ros2 fairy adopt' on the finished "
                     "recording after copying it out", bag_dir, pid)
                 continue
             bag_dir = host_dir

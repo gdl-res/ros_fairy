@@ -1,7 +1,7 @@
-"""ros2 fair adopt — pull a recording the watchdog never saw into the mission.
+"""ros2 fairy adopt — pull a recording the watchdog never saw into the mission.
 
 The dashcam captures recordings automatically: those made via
-``ros2 fair mission_record`` (into the spool) and those started in another
+``ros2 fairy mission_record`` (into the spool) and those started in another
 terminal (found by the watchdog's ``/proc`` recorder-process poller). ``adopt``
 is the manual escape hatch for what slips through — a bag recorded while the
 watchdog was down, copied from another machine, or otherwise out of reach.
@@ -96,7 +96,7 @@ def run(args, console: Console | None = None) -> int:
     console.print(f"[green]Adopted[/green] {bag_dir.name} ({dur}, {size}).")
     if warnings:
         console.print(f"[yellow]Note:[/yellow] {warnings[0]['plain_text']}")
-    console.print("Run [bold]ros2 fair mission_close[/bold] to review and save.")
+    console.print("Run [bold]ros2 fairy mission_close[/bold] to review and save.")
     return 0
 
 

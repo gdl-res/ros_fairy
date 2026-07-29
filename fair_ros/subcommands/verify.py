@@ -1,4 +1,4 @@
-"""ros2 fair verify — re-check that a saved mission archive is intact.
+"""ros2 fairy verify — re-check that a saved mission archive is intact.
 
 Answers the question a data consumer actually has months later: "is this
 archive still complete and unmodified, and does its metadata still parse?"
@@ -159,7 +159,7 @@ def verify_archive(crate: Path) -> list[dict]:
                   if r["mission_id"] == record.identity.mission_id), None)
     if match is None:
         add(WARN, "Mission is not in the local index",
-            "it won't appear in `ros2 fair list`; run `ros2 fair reindex` "
+            "it won't appear in `ros2 fairy list`; run `ros2 fairy reindex` "
             "to rebuild the list from the archives on disk")
     elif Path(match["archive_path"]).resolve() != crate.resolve():
         add(WARN, "Index points at a different path for this mission",

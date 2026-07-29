@@ -88,7 +88,7 @@ def show_status(state: dict | None, context: dict | None,
                                   f"{intent.get('goal', '?')}")
     else:
         table.add_row("Briefing", "not started yet — run: "
-                                  "ros2 fair mission_start")
+                                  "ros2 fairy mission_start")
 
     bags = sorted(p for p in paths.bags_dir().glob("*") if p.is_dir()) \
         if paths.bags_dir().is_dir() else []
@@ -101,7 +101,7 @@ def show_status(state: dict | None, context: dict | None,
         total = sum(fsio.dir_size_bytes(b) for b in bags)
         table.add_row("Recordings waiting",
                       f"{len(bags)} ({human_size(total)}) — run: "
-                      f"ros2 fair mission_close")
+                      f"ros2 fairy mission_close")
     else:
         table.add_row("Recording", "none")
 

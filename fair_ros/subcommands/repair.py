@@ -1,4 +1,4 @@
-"""ros2 fair repair — make a saved mission's unplayable bags playable again.
+"""ros2 fairy repair — make a saved mission's unplayable bags playable again.
 
 A bag recorded with an unsynchronised clock won't play (``ros2 bag play``
 honours the broken 1970↔now timeline and stalls). This writes a re-stamped,

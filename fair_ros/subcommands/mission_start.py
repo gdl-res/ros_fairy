@@ -1,4 +1,4 @@
-"""ros2 fair mission_start — the briefing wizard."""
+"""ros2 fairy mission_start — the briefing wizard."""
 
 from datetime import datetime
 
@@ -74,7 +74,7 @@ def run(args, console: Console | None = None) -> int:
     ros_env.write_file(paths.session_env_path(), ros_env.capture())
     fsio.atomic_write_json(context_path, context)
     console.print(Panel("Mission briefing saved. Start recording with: "
-                        "[bold]ros2 fair mission_record[/bold]",
+                        "[bold]ros2 fairy mission_record[/bold]",
                         border_style="green"))
     return 0
 

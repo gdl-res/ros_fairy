@@ -1,4 +1,4 @@
-"""ros2 fair doctor — preflight self-check.
+"""ros2 fairy doctor — preflight self-check.
 
 Answers "is this robot ready to capture a FAIR mission right now?" before the
 operator commits to a run, catching the failure modes that otherwise only show
@@ -36,7 +36,7 @@ def _check_identity() -> dict:
     except robot_identity.RobotIdentityError as exc:
         return {"status": FAIL, "title": "Robot is not set up",
                 "detail": str(exc),
-                "hint": "run `ros2 fair setup` (as an engineer) to create "
+                "hint": "run `ros2 fairy setup` (as an engineer) to create "
                         "/etc/fair-ros/robot_identity.yaml"}
     robot = data.get("robot") or {}
     n = len(data.get("sensors", []))
@@ -119,7 +119,7 @@ def _check_service_env() -> dict:
     """
     env = ros_env.read_file(paths.watchdog_env_path())
     setup_hint = ("re-run setup from a root shell with ROS sourced: `sudo su` "
-                  "→ `source /opt/ros/<distro>/setup.bash` → `ros2 fair setup`")
+                  "→ `source /opt/ros/<distro>/setup.bash` → `ros2 fairy setup`")
     if "ROS_DISTRO" not in env:
         missing = "missing" if not env else "has no ROS_DISTRO"
         return {"status": FAIL,
@@ -138,7 +138,7 @@ def _check_service_env() -> dict:
         return {"status": WARN,
                 "title": "Background service is on a different ROS partition",
                 "detail": "; ".join(drift),
-                "hint": "a mission started with `ros2 fair mission_start` "
+                "hint": "a mission started with `ros2 fairy mission_start` "
                         "reconciles this automatically; otherwise " + setup_hint}
     return {"status": OK, "title": "Background service ROS environment matches",
             "detail": f"distro: {env['ROS_DISTRO']}", "hint": ""}
@@ -167,7 +167,7 @@ def _check_service_harvest() -> dict:
             "detail": f"last graph harvest: {graph}",
             "hint": "the service has no ROS env — re-run setup from a root "
                     "shell with ROS sourced: `sudo su` → "
-                    "`source /opt/ros/<distro>/setup.bash` → `ros2 fair setup`"}
+                    "`source /opt/ros/<distro>/setup.bash` → `ros2 fairy setup`"}
 
 
 def _check_clock() -> dict:

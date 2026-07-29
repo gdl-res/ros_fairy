@@ -3,7 +3,7 @@
 Watches the spool bag directory via inotify, harvests context when a recording
 starts, finalises bag records when it stops. Never archives — that is the
 operator's decision at
-``ros2 fair mission_close``.
+``ros2 fairy mission_close``.
 
 Testability: the inotify object and the clock are injectable, and
 ``run_pipeline``/``step`` are callable synchronously, so tests drive the state
@@ -531,7 +531,7 @@ class Watchdog:
 
 def append_bag_record(bag_dir: Path, source: str = "mission_record") -> None:
     """Finalise one bag into harvest.json (also used by mission_close to
-    salvage bags the watchdog never saw, and by ``ros2 fair adopt``).
+    salvage bags the watchdog never saw, and by ``ros2 fairy adopt``).
 
     ``source`` tags how the recording was captured ("mission_record",
     "detected", or "adopted"); foreign sources are referenced in place and

@@ -1,7 +1,7 @@
 """Opt-in smoke tests against a live, sourced ROS 2 environment.
 
 These validate the parts mocked tests cannot:
-  - the `ros2 fair` verb is actually discovered by ros2cli (entry_points);
+  - the `ros2 fairy` verb is actually discovered by ros2cli (entry_points);
   - the subprocess-based ROS graph harvest sees a real running node;
   - the rclpy `/robot_description` capture reads a latched publisher;
   - the full record -> harvest -> archive -> verify pipeline runs against a
@@ -82,13 +82,13 @@ def talker():
 
 
 def test_fair_verb_is_discoverable():
-    """ros2cli must find the `fair` command and its verbs (entry_points)."""
-    out = subprocess.run(["ros2", "fair", "--help"],
+    """ros2cli must find the `fairy` command and its verbs (entry_points)."""
+    out = subprocess.run(["ros2", "fairy", "--help"],
                          capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     text = out.stdout + out.stderr
     for verb in ("mission_start", "mission_close", "list", "diff", "verify"):
-        assert verb in text, f"verb '{verb}' missing from `ros2 fair --help`"
+        assert verb in text, f"verb '{verb}' missing from `ros2 fairy --help`"
 
 
 def test_ros_graph_harvest_sees_live_node(talker):

@@ -2,7 +2,7 @@
 
 Drives the real modules together: watchdog (fake inotify, fake harvest
 pipeline) -> mission_start (mocked prompts) -> mission_close (save) ->
-ros2 fair list. Only subprocess-level ROS interaction is faked.
+ros2 fairy list. Only subprocess-level ROS interaction is faked.
 """
 
 import io

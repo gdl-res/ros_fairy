@@ -1,4 +1,4 @@
-"""Mission diff display (ros2 fair diff).
+"""Mission diff display (ros2 fairy diff).
 
 Compares two MissionRecord objects section by section, printing only what
 actually changed. Sections with no differences are silently omitted.

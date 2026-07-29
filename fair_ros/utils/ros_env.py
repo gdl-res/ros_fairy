@@ -4,7 +4,7 @@ The watchdog runs as a system service with no login shell, so the ROS
 environment the operator had sourced is snapshotted into a systemd-style
 ``KEY=value`` file. Two such files exist:
 
-- ``/etc/fair-ros/watchdog.env`` — frozen at ``ros2 fair setup``, loaded by the
+- ``/etc/fair-ros/watchdog.env`` — frozen at ``ros2 fairy setup``, loaded by the
   unit's ``EnvironmentFile=``. This is what the service starts with.
 - ``<spool>/session.env`` — refreshed by ``mission_start`` / ``mission_record``
   from the *live recording shell* and applied by the watchdog at harvest time,

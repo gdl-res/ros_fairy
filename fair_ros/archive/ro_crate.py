@@ -260,7 +260,7 @@ def build(record: MissionRecord, extra_files: list[dict] | None = None,
             entity["comment"] = comments
         # Per-file checksums (recorded at archive time) become File entities
         # with sha256, listed under the bag Dataset's hasPart. This makes the
-        # bag bytes verifiable by any RO-Crate tool, not just `ros2 fair verify`.
+        # bag bytes verifiable by any RO-Crate tool, not just `ros2 fairy verify`.
         parts = []
         for rel, digest in sorted(bag.file_sha256.items()):
             file_id = f"{bag_dir_id}/{rel}"
