@@ -1,5 +1,7 @@
 """Tests for utils/ros_env — the ROS-environment capture/serialise helpers."""
 
+import pytest
+
 from fair_ros.utils import ros_env
 
 
@@ -65,3 +67,37 @@ def test_write_then_read_file(tmp_path):
     ros_env.write_file(path, {"ROS_DISTRO": "jazzy"})
     assert path.is_file()
     assert ros_env.read_file(path) == {"ROS_DISTRO": "jazzy"}
+
+
+# -- find_setup_bash / source_setup_bash (self-sourcing for `setup`) ---------
+
+def test_find_setup_bash_lists_distros_sorted(tmp_path):
+    (tmp_path / "jazzy").mkdir()
+    (tmp_path / "jazzy" / "setup.bash").write_text("")
+    (tmp_path / "humble").mkdir()
+    (tmp_path / "humble" / "setup.bash").write_text("")
+    (tmp_path / "not_a_distro").mkdir()  # no setup.bash inside — ignored
+    found = ros_env.find_setup_bash(tmp_path)
+    assert [p.parent.name for p in found] == ["humble", "jazzy"]
+
+
+def test_find_setup_bash_missing_root_returns_empty(tmp_path):
+    assert ros_env.find_setup_bash(tmp_path / "does-not-exist") == []
+
+
+def test_source_setup_bash_returns_only_changed_vars(tmp_path, monkeypatch):
+    monkeypatch.setenv("FAIR_ROS_TEST_UNCHANGED", "same")
+    script = tmp_path / "setup.bash"
+    script.write_text(
+        "export FAIR_ROS_TEST_NEW=hello\n"
+        "export FAIR_ROS_TEST_UNCHANGED=same\n")
+    changed = ros_env.source_setup_bash(script)
+    assert changed.get("FAIR_ROS_TEST_NEW") == "hello"
+    assert "FAIR_ROS_TEST_UNCHANGED" not in changed
+
+
+def test_source_setup_bash_raises_on_failure(tmp_path):
+    script = tmp_path / "broken.bash"
+    script.write_text("echo bad >&2\nexit 1\n")
+    with pytest.raises(RuntimeError, match="bad"):
+        ros_env.source_setup_bash(script)

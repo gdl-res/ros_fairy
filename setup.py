@@ -67,6 +67,7 @@ setup(
         ],
         "console_scripts": [
             "fair-ros-watchdog = fair_ros.watchdog.watchdog:main",
+            "fair-ros-setup = fair_ros.subcommands.setup:main",
         ],
     },
 )

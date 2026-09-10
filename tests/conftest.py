@@ -24,7 +24,7 @@ def pytest_collection_modifyitems(config, items):
         return
     skip = pytest.mark.skip(
         reason="requires a sourced ROS 2 environment (ros2 on PATH + "
-               "$ROS_DISTRO); see docs/real-robot-smoke-test.md")
+               "$ROS_DISTRO); source ROS 2 and run `pytest -m ros`")
     for item in items:
         if "ros" in item.keywords:
             item.add_marker(skip)

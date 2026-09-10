@@ -16,6 +16,8 @@ environment" and how the files are written and parsed.
 """
 
 import os
+import shlex
+import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -81,6 +83,48 @@ def parse(text: str) -> dict[str, str]:
         if sep:
             env[key.strip()] = val.strip()
     return env
+
+
+def find_setup_bash(search_root: Path = Path("/opt/ros")) -> list[Path]:
+    """ROS 2 distro ``setup.bash`` scripts found under ``search_root``.
+
+    Lets ``setup`` offer to source ROS 2 itself instead of requiring the
+    caller to have already done it (see :func:`source_setup_bash`).
+    """
+    if not search_root.is_dir():
+        return []
+    return sorted(search_root.glob("*/setup.bash"))
+
+
+def source_setup_bash(path: Path, timeout: float = 15.0) -> dict[str, str]:
+    """Source a ROS 2 ``setup.bash`` in a subshell; return what it changed.
+
+    Only the environment variables that differ from this process's current
+    ``os.environ`` are returned (not the subshell's full environment), so the
+    caller can merge just the ROS-related additions without picking up
+    unrelated bash-internal noise.
+
+    This is what lets ``sudo fair-ros-setup`` work as a single command: sudo's
+    ``env_reset`` (and a ``secure_path`` that usually excludes
+    ``/opt/ros/<distro>/bin``) means a root shell often can't even resolve
+    ``ros2`` unless ROS was sourced *before* sudo stripped the environment —
+    so the historical workaround was ``sudo su`` + manually sourcing. Doing
+    the sourcing here, in Python, after root is already established, removes
+    that step.
+    """
+    script = f"source {shlex.quote(str(path))} && env -0"
+    result = subprocess.run(["bash", "-c", script], capture_output=True,
+                            timeout=timeout)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.decode(errors="replace").strip()
+                           or f"sourcing {path} failed")
+    after: dict[str, str] = {}
+    for entry in result.stdout.split(b"\0"):
+        if not entry:
+            continue
+        key, _, val = entry.decode(errors="replace").partition("=")
+        after[key] = val
+    return {k: v for k, v in after.items() if os.environ.get(k) != v}
 
 
 def read_file(path: Path) -> dict[str, str]:

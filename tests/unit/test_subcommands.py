@@ -326,11 +326,251 @@ def test_diff_json(fair_dirs, capsys):
 
 # --- setup ---------------------------------------------------------------------
 
-def test_setup_requires_root(fair_dirs):
+def test_run_as_normal_user_needs_no_root_until_apply(fair_dirs):
+    """The default flow: the wizard runs unprivileged; only the commit step
+    (`_apply`, run via sudo) touches anything that needs root."""
     console = _console()
+    config = {"robot": {"name": "X"}}
+    with mock.patch.object(setup_cmd.os, "geteuid", return_value=1000), \
+            mock.patch.object(setup_cmd, "_check_ros_visible",
+                              return_value=True), \
+            mock.patch.object(setup_cmd.shutil, "which",
+                              return_value="/usr/bin/docker"), \
+            mock.patch.object(setup_cmd, "_collect", return_value=config), \
+            mock.patch.object(setup_cmd.ros_env, "capture",
+                              return_value={"ROS_DISTRO": "jazzy"}), \
+            mock.patch.object(setup_cmd, "_apply_via_sudo",
+                              return_value=0) as apply_sudo, \
+            mock.patch.object(setup_cmd, "_apply") as apply_direct:
+        assert setup_cmd.run(ARGS, console=console) == 0
+    apply_direct.assert_not_called()
+    apply_sudo.assert_called_once()
+    payload = apply_sudo.call_args[0][1]
+    assert payload == {"config": config, "env": {"ROS_DISTRO": "jazzy"}}
+    assert "password" in console.file.getvalue().lower()
+
+
+def test_run_as_root_applies_directly_no_sudo_reexec(fair_dirs):
+    console = _console()
+    config = {"robot": {"name": "X"}}
+    with mock.patch.object(setup_cmd.os, "geteuid", return_value=0), \
+            mock.patch.object(setup_cmd, "_ensure_ros_environment",
+                              return_value=True), \
+            mock.patch.object(setup_cmd, "_check_ros_visible",
+                              return_value=True), \
+            mock.patch.object(setup_cmd.shutil, "which",
+                              return_value="/usr/bin/docker"), \
+            mock.patch.object(setup_cmd, "_collect", return_value=config), \
+            mock.patch.object(setup_cmd.ros_env, "capture",
+                              return_value={"ROS_DISTRO": "jazzy"}), \
+            mock.patch.object(setup_cmd, "_apply",
+                              return_value=True) as apply_direct, \
+            mock.patch.object(setup_cmd, "_apply_via_sudo") as apply_sudo:
+        assert setup_cmd.run(ARGS, console=console) == 0
+    apply_direct.assert_called_once()
+    apply_sudo.assert_not_called()
+
+
+def test_run_declined_review_writes_nothing(fair_dirs):
+    console = _console()
+    with mock.patch.object(setup_cmd.os, "geteuid", return_value=1000), \
+            mock.patch.object(setup_cmd, "_check_ros_visible",
+                              return_value=True), \
+            mock.patch.object(setup_cmd.shutil, "which",
+                              return_value="/usr/bin/docker"), \
+            mock.patch.object(setup_cmd, "_collect", return_value=None), \
+            mock.patch.object(setup_cmd, "_apply_via_sudo") as apply_sudo:
+        assert setup_cmd.run(ARGS, console=console) == 0
+    apply_sudo.assert_not_called()
+
+
+def test_run_apply_from_stdin_requires_root(fair_dirs):
+    console = _console()
+    args = SimpleNamespace(apply_from_stdin=True, debug=False)
     with mock.patch.object(setup_cmd.os, "geteuid", return_value=1000):
-        assert setup_cmd.run(ARGS, console=console) == 1
-    assert "sudo" in console.file.getvalue()
+        assert setup_cmd.run(args, console=console) == 1
+    assert "internal" in console.file.getvalue().lower()
+
+
+def test_run_apply_from_stdin_applies_the_staged_payload(fair_dirs, monkeypatch):
+    console = _console()
+    args = SimpleNamespace(apply_from_stdin=True, debug=False)
+    payload = {"config": {"robot": {"name": "X"}},
+               "env": {"ROS_DISTRO": "jazzy"}}
+    monkeypatch.setattr(setup_cmd.sys, "stdin", io.StringIO(json.dumps(payload)))
+    with mock.patch.object(setup_cmd.os, "geteuid", return_value=0), \
+            mock.patch.object(setup_cmd, "_apply",
+                              return_value=True) as apply_mock:
+        assert setup_cmd.run(args, console=console) == 0
+    apply_mock.assert_called_once_with(console, payload)
+
+
+def test_apply_via_sudo_pipes_payload_over_stdin(fair_dirs):
+    console = _console()
+    payload = {"config": {"a": 1}, "env": {"b": 2}}
+    with mock.patch.object(setup_cmd.shutil, "which",
+                           return_value="/usr/bin/sudo"), \
+            mock.patch.object(setup_cmd.subprocess, "run") as run_mock:
+        run_mock.return_value = SimpleNamespace(returncode=0)
+        assert setup_cmd._apply_via_sudo(console, payload) == 0
+    cmd, kwargs = run_mock.call_args[0][0], run_mock.call_args[1]
+    assert cmd[0] == "/usr/bin/sudo"
+    assert "--apply-from-stdin" in cmd
+    assert json.loads(kwargs["input"]) == payload
+
+
+def test_apply_via_sudo_missing_sudo_binary(fair_dirs):
+    console = _console()
+    with mock.patch.object(setup_cmd.shutil, "which", return_value=None):
+        assert setup_cmd._apply_via_sudo(console, {}) == 1
+    assert "sudo" in console.file.getvalue().lower()
+
+
+def test_apply_writes_identity_dirs_and_service_with_given_env(fair_dirs):
+    console = _console()
+    payload = {"config": {"robot": {"name": "X"}},
+               "env": {"ROS_DISTRO": "jazzy"}}
+    with mock.patch.object(setup_cmd, "write_identity") as wi, \
+            mock.patch.object(setup_cmd, "create_dirs") as cd, \
+            mock.patch.object(setup_cmd, "install_service",
+                              return_value=True) as inst, \
+            mock.patch.dict(setup_cmd.os.environ, {}, clear=True):
+        assert setup_cmd._apply(console, payload) is True
+    wi.assert_called_once_with(payload["config"])
+    cd.assert_called_once()
+    inst.assert_called_once_with(console, payload["env"])
+
+
+def test_collect_returns_none_when_review_declined(fair_dirs):
+    console = _console()
+    config = {"robot": {"name": "X", "platform": "P", "serial_number": "S"},
+              "owner": {"organization": "O", "contact_email": "a@b.c"}}
+    with mock.patch.object(setup_cmd, "ask_robot", return_value=config), \
+            mock.patch.object(setup_cmd, "ask_sensors",
+                              return_value=([], [])), \
+            mock.patch.object(setup_cmd, "review", return_value=False):
+        assert setup_cmd._collect(console) is None
+    assert "Nothing was written" in console.file.getvalue()
+
+
+def test_collect_returns_config_when_review_confirmed(fair_dirs):
+    console = _console()
+    config = {"robot": {"name": "X", "platform": "P", "serial_number": "S"},
+              "owner": {"organization": "O", "contact_email": "a@b.c"}}
+    with mock.patch.object(setup_cmd, "ask_robot", return_value=config), \
+            mock.patch.object(setup_cmd, "ask_sensors",
+                              return_value=([], [])), \
+            mock.patch.object(setup_cmd, "review", return_value=True):
+        assert setup_cmd._collect(console) == config
+
+
+# --- setup: self-sourcing ROS (`fair-ros-setup`, no pre-sourced shell) --------
+
+def test_ensure_ros_environment_already_sourced_is_a_noop(fair_dirs):
+    with mock.patch.object(setup_cmd.shutil, "which", return_value="/bin/ros2"), \
+            mock.patch.dict(setup_cmd.os.environ, {"ROS_DISTRO": "jazzy"}), \
+            mock.patch.object(setup_cmd.ros_env, "source_setup_bash") as src:
+        assert setup_cmd._ensure_ros_environment(_console(), None) is True
+    src.assert_not_called()
+
+
+def test_ensure_ros_environment_autodetects_single_install(fair_dirs, tmp_path):
+    setup_bash = tmp_path / "jazzy" / "setup.bash"
+    setup_bash.parent.mkdir()
+    setup_bash.write_text("")
+    with mock.patch.object(setup_cmd.shutil, "which",
+                           side_effect=[None, "/opt/ros/jazzy/bin/ros2"]), \
+            mock.patch.dict(setup_cmd.os.environ, {}, clear=True), \
+            mock.patch.object(setup_cmd.ros_env, "find_setup_bash",
+                              return_value=[setup_bash]), \
+            mock.patch.object(setup_cmd.ros_env, "source_setup_bash",
+                              return_value={"ROS_DISTRO": "jazzy"}) as src:
+        assert setup_cmd._ensure_ros_environment(_console(), None) is True
+    src.assert_called_once_with(setup_bash)
+    assert setup_cmd.os.environ.get("ROS_DISTRO") == "jazzy"
+
+
+def test_ensure_ros_environment_explicit_path_overrides_autodetect(
+        fair_dirs, tmp_path):
+    explicit = tmp_path / "custom" / "setup.bash"
+    explicit.parent.mkdir()
+    explicit.write_text("")
+    console = _console()
+    with mock.patch.object(setup_cmd.shutil, "which",
+                           side_effect=[None, "/opt/ros/jazzy/bin/ros2"]), \
+            mock.patch.dict(setup_cmd.os.environ, {}, clear=True), \
+            mock.patch.object(setup_cmd.ros_env, "find_setup_bash") as find, \
+            mock.patch.object(setup_cmd.ros_env, "source_setup_bash",
+                              return_value={}) as src:
+        assert setup_cmd._ensure_ros_environment(console, str(explicit)) is True
+    find.assert_not_called()
+    src.assert_called_once_with(explicit)
+
+
+def test_ensure_ros_environment_explicit_path_missing(fair_dirs, tmp_path):
+    console = _console()
+    with mock.patch.object(setup_cmd.shutil, "which", return_value=None):
+        ok = setup_cmd._ensure_ros_environment(
+            console, str(tmp_path / "nope.bash"))
+    assert ok is False
+    assert "doesn't exist" in console.file.getvalue()
+
+
+def test_ensure_ros_environment_ambiguous_installs(fair_dirs, tmp_path):
+    a, b = tmp_path / "a" / "setup.bash", tmp_path / "b" / "setup.bash"
+    console = _console()
+    with mock.patch.object(setup_cmd.shutil, "which", return_value=None), \
+            mock.patch.dict(setup_cmd.os.environ, {}, clear=True), \
+            mock.patch.object(setup_cmd.ros_env, "find_setup_bash",
+                              return_value=[a, b]):
+        ok = setup_cmd._ensure_ros_environment(console, None)
+    assert ok is False
+    assert "Multiple ROS 2 installs" in console.file.getvalue()
+    assert "--ros-setup" in console.file.getvalue()
+
+
+def test_ensure_ros_environment_no_install_found(fair_dirs):
+    console = _console()
+    with mock.patch.object(setup_cmd.shutil, "which", return_value=None), \
+            mock.patch.dict(setup_cmd.os.environ, {}, clear=True), \
+            mock.patch.object(setup_cmd.ros_env, "find_setup_bash",
+                              return_value=[]):
+        ok = setup_cmd._ensure_ros_environment(console, None)
+    assert ok is False
+    assert "--ros-setup" in console.file.getvalue()
+
+
+def test_ensure_ros_environment_source_failure_is_reported(fair_dirs, tmp_path):
+    setup_bash = tmp_path / "jazzy" / "setup.bash"
+    setup_bash.parent.mkdir()
+    setup_bash.write_text("")
+    console = _console()
+    with mock.patch.object(setup_cmd.shutil, "which", return_value=None), \
+            mock.patch.dict(setup_cmd.os.environ, {}, clear=True), \
+            mock.patch.object(setup_cmd.ros_env, "find_setup_bash",
+                              return_value=[setup_bash]), \
+            mock.patch.object(setup_cmd.ros_env, "source_setup_bash",
+                              side_effect=RuntimeError("boom")):
+        ok = setup_cmd._ensure_ros_environment(console, None)
+    assert ok is False
+    assert "boom" in console.file.getvalue()
+
+
+def test_ensure_ros_environment_sourced_but_still_no_ros2(fair_dirs, tmp_path):
+    """Sourcing succeeded but ros2 still isn't found — a non-ROS script."""
+    setup_bash = tmp_path / "jazzy" / "setup.bash"
+    setup_bash.parent.mkdir()
+    setup_bash.write_text("")
+    console = _console()
+    with mock.patch.object(setup_cmd.shutil, "which", return_value=None), \
+            mock.patch.dict(setup_cmd.os.environ, {}, clear=True), \
+            mock.patch.object(setup_cmd.ros_env, "find_setup_bash",
+                              return_value=[setup_bash]), \
+            mock.patch.object(setup_cmd.ros_env, "source_setup_bash",
+                              return_value={"FOO": "bar"}):
+        ok = setup_cmd._ensure_ros_environment(console, None)
+    assert ok is False
+    assert "still can't find ros2" in console.file.getvalue()
 
 
 def test_setup_ask_robot_validates_email(fair_dirs):
@@ -671,7 +911,7 @@ def test_setup_captures_ros_environment(fair_dirs):
            "PATH": "/opt/ros/jazzy/bin:/usr/bin",
            "HOME": "/root", "EDITOR": "vim"}
     with mock.patch.dict(setup_cmd.os.environ, env, clear=True):
-        setup_cmd.write_watchdog_env(_console())
+        setup_cmd.write_watchdog_env(setup_cmd.ros_env.capture())
         text = paths.watchdog_env_path().read_text()
     assert "ROS_DISTRO=jazzy" in text
     assert "RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" in text
@@ -692,7 +932,7 @@ def test_setup_fails_when_ros_environment_missing(fair_dirs):
                          clear=True):
         assert setup_cmd._check_ros_visible(console) is False
     out = console.file.getvalue()
-    assert "ROS_DISTRO is unset" in out and "ros2 fairy setup" in out
+    assert "ROS_DISTRO is unset" in out and "fair-ros-setup" in out
 
 
 def test_setup_fails_when_graph_not_visible(fair_dirs):

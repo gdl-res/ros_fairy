@@ -32,5 +32,5 @@ testpaths = ["tests"]
 # stays clean. Run them on a sourced ROS 2 box with: pytest -m ros
 addopts = ["-m", "not ros"]
 markers = [
-    "ros: integration test requiring a live, sourced ROS 2 environment (deselected by default; run with `pytest -m ros`). See docs/real-robot-smoke-test.md.",
+    "ros: integration test requiring a live, sourced ROS 2 environment (deselected by default; run with `pytest -m ros`).",
 ]

@@ -21,14 +21,27 @@ verified, diffed, and shared as a single checksummed file.
 
 ## Install
 
-Build it into a ROS 2 workspace (`ament_python`, ROS 2 Humble/Jazzy or newer):
+```bash
+git clone https://github.com/gdl-res/ros_fairy.git
+cd ros_fairy
+./install.sh                   # pip-installs the package (asks for sudo
+                                #   only if it actually needs root)
+ros2 fairy setup                # identity file, directories, watchdog service
+                                #   — no sudo up front; prompts for your
+                                #   password only when it writes /etc
+ros2 fairy doctor               # confirm the robot is ready to capture
+```
+
+Prefer a colcon workspace instead (`ament_python`, ROS 2 Humble/Jazzy or
+newer)? That works too — `install.sh` is just `pip install`, nothing it does
+is colcon-specific:
 
 ```bash
 cd ~/ros2_ws/src && git clone https://github.com/gdl-res/ros_fairy.git
 cd ~/ros2_ws && colcon build --packages-select fair_ros
 source install/setup.bash
-sudo ros2 fairy setup          # identity file, directories, watchdog service
-ros2 fairy doctor              # confirm the robot is ready to capture
+ros2 fairy setup
+ros2 fairy doctor
 ```
 
 ## A mission, start to finish

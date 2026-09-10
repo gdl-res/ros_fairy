@@ -118,8 +118,7 @@ def _check_service_env() -> dict:
     partition and harvests an empty graph (issue #29).
     """
     env = ros_env.read_file(paths.watchdog_env_path())
-    setup_hint = ("re-run setup from a root shell with ROS sourced: `sudo su` "
-                  "→ `source /opt/ros/<distro>/setup.bash` → `ros2 fairy setup`")
+    setup_hint = "re-run setup: `ros2 fairy setup`"
     if "ROS_DISTRO" not in env:
         missing = "missing" if not env else "has no ROS_DISTRO"
         return {"status": FAIL,
@@ -165,9 +164,8 @@ def _check_service_harvest() -> dict:
     return {"status": FAIL,
             "title": "Background service cannot reach ROS",
             "detail": f"last graph harvest: {graph}",
-            "hint": "the service has no ROS env — re-run setup from a root "
-                    "shell with ROS sourced: `sudo su` → "
-                    "`source /opt/ros/<distro>/setup.bash` → `ros2 fairy setup`"}
+            "hint": "the service has no ROS env — re-run setup: "
+                    "`ros2 fairy setup`"}
 
 
 def _check_clock() -> dict:
