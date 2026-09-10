@@ -164,6 +164,42 @@ def test_mission_close_blocks_while_recording(fairy_dirs):
     assert "still in progress" in console.file.getvalue()
 
 
+def test_wait_for_finalising_returns_immediately_when_idle(fairy_dirs):
+    with mock.patch.object(mission_close.wd, "read_state",
+                           return_value={"state": "IDLE"}), \
+            mock.patch.object(mission_close.time, "sleep") as sleep_mock:
+        mission_close._wait_for_finalising(_console())
+    sleep_mock.assert_not_called()
+
+
+def test_wait_for_finalising_polls_until_state_changes(fairy_dirs):
+    states = iter([{"state": "FINALISING"}, {"state": "FINALISING"},
+                   {"state": "IDLE"}])
+    with mock.patch.object(mission_close.wd, "read_state",
+                           side_effect=lambda: next(states)), \
+            mock.patch.object(mission_close.time, "sleep") as sleep_mock:
+        mission_close._wait_for_finalising(_console())
+    assert sleep_mock.call_count == 2
+
+
+def test_mission_close_waits_for_finalising_instead_of_racing_it(fairy_dirs):
+    """Regression (2026-09-10): a watchdog still FINALISING (a short
+    recording whose harvest pipeline outlasted it) is not "RECORDING", so
+    the old code raced ahead and wrongly reported nothing was recorded."""
+    _spool(fairy_dirs)
+    fsio.atomic_write_json(paths.watchdog_state_path(), {
+        "pid": os.getpid(), "state": "FINALISING"})
+    console = _console()
+    with mock.patch.object(mission_close, "_wait_for_finalising") as wait_mock, \
+            mock.patch.object(mission_close.review, "confirm_save",
+                              return_value="discard"):
+        assert mission_close.run(ARGS, console=console) == 0
+    wait_mock.assert_called_once()
+    out = console.file.getvalue()
+    assert "still in progress" not in out
+    assert "nothing recorded" not in out
+
+
 def test_mission_close_save_flow(fairy_dirs):
     _spool(fairy_dirs)
     console = _console()

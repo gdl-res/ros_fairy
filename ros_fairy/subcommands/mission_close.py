@@ -2,6 +2,7 @@
 
 import shutil
 import sys
+import time
 
 from rich.console import Console
 from rich.panel import Panel
@@ -22,6 +23,34 @@ def _recording_in_progress() -> bool:
         return False
     from ros_fairy.ui.status import _pid_alive
     return _pid_alive(state.get("pid"))
+
+
+def _wait_for_finalising(console: Console) -> None:
+    """Wait out an in-progress FINALISING instead of racing it.
+
+    A recording shorter than the harvest pipeline (robot identity, ROS
+    graph, docker info, ...) leaves the watchdog in FINALISING — not
+    RECORDING — for up to :data:`wd.HARVEST_WAIT_S`, appending the bag to
+    harvest.json only once it's done. ``_recording_in_progress`` only checks
+    for the literal "RECORDING" state, so without this, a `mission_close`
+    run in that window would find no bags yet and wrongly report nothing
+    was recorded (reported 2026-09-10 against a bag whose harvest took 61s
+    to finish after a ~4s recording).
+    """
+    state = wd.read_state()
+    if state is None or state.get("state") != "FINALISING":
+        return
+    deadline = time.monotonic() + wd.HARVEST_WAIT_S + 5
+    with Progress(SpinnerColumn(),
+                  TextColumn("[progress.description]{task.description}"),
+                  console=console, transient=True) as progress:
+        progress.add_task(
+            "Finishing up the last recording's context capture…", total=None)
+        while time.monotonic() < deadline:
+            time.sleep(1)
+            state = wd.read_state()
+            if state is None or state.get("state") != "FINALISING":
+                return
 
 
 def _salvage_bags(harvest: dict | None) -> dict | None:
@@ -81,6 +110,8 @@ def run(args, console: Console | None = None) -> int:
                       "progress. Stop it first (Ctrl-C in the recording "
                       "window), then run this again.[/yellow]")
         return 1
+
+    _wait_for_finalising(console)
 
     harvest, context = builder.load_spool()
     harvest = _salvage_bags(harvest)
