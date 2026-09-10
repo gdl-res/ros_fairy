@@ -41,6 +41,15 @@ trap 'rm -f "$LOG"' EXIT
 echo "Installing ros_fairy..."
 if python3 -m pip install "$TARGET" >"$LOG" 2>&1; then
     cat "$LOG"
+elif grep -qiE "read-only file system|errno 30|EROFS" "$LOG"; then
+    # sudo can't fix this — the filesystem itself refuses writes (common on
+    # robot images with a read-only rootfs overlay). Retrying as root would
+    # just fail the same way, so say so instead of retrying.
+    echo "The filesystem pip is trying to write to is read-only, so sudo" >&2
+    echo "won't help. Remount it read-write, or install into a venv on" >&2
+    echo "writable storage: python3 -m venv ~/ros_fairy_venv && ~/ros_fairy_venv/bin/pip install $TARGET" >&2
+    cat "$LOG" >&2
+    exit 1
 elif grep -qiE "permission denied|errno 13|externally-managed-environment" "$LOG"; then
     echo "System-wide install needs root — retrying." >&2
     if [ "$(id -u)" -eq 0 ]; then

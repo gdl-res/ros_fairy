@@ -13,6 +13,12 @@
 #   -y, --yes   skip the confirmation prompt (for scripted use)
 set -euo pipefail
 
+# Deliberately not looked up from the installed package (e.g. `python3 -c
+# "from ros_fairy.subcommands.setup import SERVICE_NAME"`): this script must
+# keep working to clean up a broken/partial install, which is exactly when
+# importing ros_fairy might not. Keep these four in sync by hand with
+# ros_fairy/subcommands/setup.py's SERVICE_NAME/GROUP_NAME and
+# ros_fairy/utils/paths.py's DEFAULT_CONFIG_DIR/DEFAULT_VAR_DIR.
 SERVICE_NAME="ros-fairy-watchdog.service"
 GROUP_NAME="ros-fairy"
 CONFIG_DIR="${ROS_FAIRY_CONFIG_DIR:-/etc/ros-fairy}"
@@ -54,7 +60,12 @@ fi
 if [ "$(id -u)" -ne 0 ]; then
     if command -v sudo >/dev/null 2>&1; then
         echo "Removing this needs root — you may be asked for your password."
-        exec sudo "$0" --yes
+        # sudo's env_reset would otherwise drop a relocated install's
+        # ROS_FAIRY_CONFIG_DIR/VAR_DIR before the deletion logic below
+        # re-derives CONFIG_DIR/VAR_DIR from the (now-empty) environment —
+        # silently targeting the default paths instead of the ones just
+        # shown in the confirmation banner above.
+        exec sudo --preserve-env=ROS_FAIRY_CONFIG_DIR,ROS_FAIRY_VAR_DIR "$0" --yes
     fi
     echo "This needs root (it removes a system service, /etc, and a system" >&2
     echo "group) and sudo isn't available. Re-run this script as root." >&2

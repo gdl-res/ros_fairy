@@ -206,7 +206,9 @@ def write_identity(config: dict) -> None:
     path.chmod(0o644)
 
 
-def create_dirs() -> None:
+def create_dirs() -> bool | None:
+    """Create the shared dirs/group; returns :func:`_add_operator_to_group`'s
+    outcome (whether the invoking operator actually ended up in the group)."""
     try:
         gid = grp.getgrnam(GROUP_NAME).gr_gid
     except KeyError:
@@ -233,26 +235,34 @@ def create_dirs() -> None:
                     os.chown(f, -1, gid)
             except OSError:
                 pass
-    _add_operator_to_group()
+    return _add_operator_to_group()
 
 
-def _add_operator_to_group() -> None:
+def _add_operator_to_group() -> bool | None:
     """Put the human behind sudo into the ros-fairy group.
 
     Without this every non-root account is locked out of the spool and the
     index, so mission_start fails on the first real mission. Best-effort:
     SUDO_USER survives `sudo su` (su without `-` keeps the environment), but
     a login shell loses it — then the engineer adds operators by hand.
+
+    Returns True if the operator is (now) a member, False if adding them
+    failed, or None if there was no operator to add (root, or no SUDO_USER —
+    the caller falls back to the generic "remember to add operators" hint
+    either way, so the two non-True cases are treated the same by callers
+    that don't need to distinguish them).
     """
     operator = os.environ.get("SUDO_USER", "")
     if not operator or operator == "root":
-        return
+        return None
     try:
         if operator in grp.getgrnam(GROUP_NAME).gr_mem:
-            return
+            return True
     except KeyError:
-        return
-    subprocess.run(["usermod", "-aG", GROUP_NAME, operator], check=False)
+        return None
+    result = subprocess.run(["usermod", "-aG", GROUP_NAME, operator],
+                            check=False)
+    return result.returncode == 0
 
 
 def write_watchdog_env(env: dict[str, str]) -> None:
@@ -355,9 +365,11 @@ def install_service(console: Console, env: dict[str, str]) -> bool:
     while time.monotonic() < deadline:
         active = subprocess.run(["systemctl", "is-active", SERVICE_NAME],
                                 capture_output=True, text=True)
-        if active.stdout.strip() == "active" and \
-                paths.watchdog_state_path().is_file():
+        state = active.stdout.strip()
+        if state == "active" and paths.watchdog_state_path().is_file():
             return True
+        if state == "failed":
+            return False  # crashed on start — no point waiting out the timer
         time.sleep(0.5)
     return False
 
@@ -400,13 +412,17 @@ def _apply(console: Console, payload: dict) -> bool:
     so it needs nothing beyond filesystem/systemd privileges.
     """
     write_identity(payload["config"])
-    create_dirs()
+    added = create_dirs()
     operator = os.environ.get("SUDO_USER", "")
-    if operator and operator != "root":
+    if added is True:
         console.print(f"[dim]Added {operator} to the '{GROUP_NAME}' group so "
                       "missions can be recorded without root (takes effect at "
                       "next login). Add other operator accounts with: "
                       f"usermod -aG {GROUP_NAME} <user>[/dim]")
+    elif added is False:
+        console.print(f"[red]Couldn't add {operator} to the '{GROUP_NAME}' "
+                      f"group (`usermod` failed) — add them by hand: "
+                      f"usermod -aG {GROUP_NAME} {operator}[/red]")
     else:
         console.print(f"[yellow]Remember to add operator accounts to the "
                       f"'{GROUP_NAME}' group (usermod -aG {GROUP_NAME} <user>) "
@@ -428,6 +444,24 @@ def _apply_via_sudo(console: Console, payload: dict) -> int:
     The payload travels over the child's stdin (not a temp file, and not
     argv, which would leak it to ``ps``); sudo itself prompts on the
     terminal directly, so piping stdin doesn't interfere with that.
+
+    sudo's default ``env_reset`` strips everything from the environment,
+    including two things the child needs:
+
+    - ``ROS_FAIRY_CONFIG_DIR``/``ROS_FAIRY_VAR_DIR``, if the caller relocated
+      the install (``utils/paths.py``) — without them the privileged child
+      would silently write to the *default* /etc, /var locations instead of
+      the ones ``_collect`` just read from. ``--preserve-env`` names exactly
+      these two, nothing else.
+    - the ability to ``import ros_fairy`` at all, for a colcon-workspace
+      install where the package lives on ``PYTHONPATH`` (set by `source
+      install/setup.bash`) rather than in the interpreter's default
+      site-packages. Rather than preserving the *inherited* PYTHONPATH
+      (which — per the same trust boundary ``ros_env.SESSION_ADOPT_KEYS``
+      documents for session.env — would hand root's import machinery a
+      loader path influenced by whatever the unprivileged shell happened to
+      have), this computes the one correct directory from this *running,
+      already-trusted* module's own resolved location and sets only that.
     """
     sudo = shutil.which("sudo")
     if sudo is None:
@@ -435,10 +469,13 @@ def _apply_via_sudo(console: Console, payload: dict) -> int:
                       "command as root instead (e.g. `su -c 'ros2 fairy "
                       "setup'`).[/red]")
         return 1
+    pkg_root = str(Path(__file__).resolve().parents[2])
+    child_env = {**os.environ, "PYTHONPATH": pkg_root}
     result = subprocess.run(
-        [sudo, sys.executable, "-m", "ros_fairy.subcommands.setup",
+        [sudo, "--preserve-env=ROS_FAIRY_CONFIG_DIR,ROS_FAIRY_VAR_DIR,PYTHONPATH",
+         sys.executable, "-m", "ros_fairy.subcommands.setup",
          "--apply-from-stdin"],
-        input=json.dumps(payload).encode())
+        input=json.dumps(payload).encode(), env=child_env)
     return result.returncode
 
 

@@ -419,6 +419,28 @@ def test_apply_via_sudo_pipes_payload_over_stdin(fairy_dirs):
     assert json.loads(kwargs["input"]) == payload
 
 
+def test_apply_via_sudo_preserves_dir_overrides_and_pythonpath(fairy_dirs):
+    """sudo's env_reset must not silently drop a relocated install's
+    ROS_FAIRY_CONFIG_DIR/VAR_DIR, nor break `import ros_fairy` for a
+    colcon-workspace install that relies on PYTHONPATH."""
+    console = _console()
+    with mock.patch.object(setup_cmd.shutil, "which",
+                           return_value="/usr/bin/sudo"), \
+            mock.patch.object(setup_cmd.subprocess, "run") as run_mock:
+        run_mock.return_value = SimpleNamespace(returncode=0)
+        setup_cmd._apply_via_sudo(console, {"config": {}, "env": {}})
+    cmd, kwargs = run_mock.call_args[0][0], run_mock.call_args[1]
+    preserve = next(a for a in cmd if a.startswith("--preserve-env="))
+    assert "ROS_FAIRY_CONFIG_DIR" in preserve
+    assert "ROS_FAIRY_VAR_DIR" in preserve
+    assert "PYTHONPATH" in preserve
+    # The PYTHONPATH handed to sudo's own process (for --preserve-env to
+    # forward) must point at the directory containing the ros_fairy package,
+    # not whatever the unprivileged shell's PYTHONPATH happened to be.
+    assert kwargs["env"]["PYTHONPATH"] == \
+        str(Path(setup_cmd.__file__).resolve().parents[2])
+
+
 def test_apply_via_sudo_missing_sudo_binary(fairy_dirs):
     console = _console()
     with mock.patch.object(setup_cmd.shutil, "which", return_value=None):
@@ -439,6 +461,65 @@ def test_apply_writes_identity_dirs_and_service_with_given_env(fairy_dirs):
     wi.assert_called_once_with(payload["config"])
     cd.assert_called_once()
     inst.assert_called_once_with(console, payload["env"])
+
+
+def test_apply_reports_group_add_failure_instead_of_false_success(fairy_dirs):
+    """A failed `usermod` must not be reported to the operator as success —
+    they'd otherwise find out the hard way when mission_start denies them."""
+    console = _console()
+    payload = {"config": {"robot": {"name": "X"}}, "env": {}}
+    with mock.patch.object(setup_cmd, "write_identity"), \
+            mock.patch.object(setup_cmd, "create_dirs", return_value=False), \
+            mock.patch.object(setup_cmd, "install_service", return_value=True), \
+            mock.patch.dict(setup_cmd.os.environ, {"SUDO_USER": "jane"}):
+        assert setup_cmd._apply(console, payload) is True
+    out = console.file.getvalue()
+    assert "Couldn't add jane" in out
+    assert "Added jane" not in out
+
+
+def test_add_operator_to_group_returns_none_with_no_sudo_user(fairy_dirs):
+    with mock.patch.dict(setup_cmd.os.environ, {}, clear=True):
+        assert setup_cmd._add_operator_to_group() is None
+
+
+def test_add_operator_to_group_returns_true_when_already_member(fairy_dirs):
+    fake_group = SimpleNamespace(gr_mem=["jane"])
+    with mock.patch.dict(setup_cmd.os.environ, {"SUDO_USER": "jane"}), \
+            mock.patch.object(setup_cmd.grp, "getgrnam",
+                              return_value=fake_group):
+        assert setup_cmd._add_operator_to_group() is True
+
+
+def test_add_operator_to_group_returns_usermod_outcome(fairy_dirs):
+    fake_group = SimpleNamespace(gr_mem=[])
+    with mock.patch.dict(setup_cmd.os.environ, {"SUDO_USER": "jane"}), \
+            mock.patch.object(setup_cmd.grp, "getgrnam",
+                              return_value=fake_group), \
+            mock.patch.object(setup_cmd.subprocess, "run",
+                              return_value=SimpleNamespace(returncode=1)):
+        assert setup_cmd._add_operator_to_group() is False
+
+
+def test_install_service_stops_polling_on_failed_unit(fairy_dirs):
+    """A unit that crashes on start must be reported immediately, not after
+    burning the full 10s timeout polling a service that's already dead."""
+    console = _console()
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        if cmd[:2] == ["systemctl", "is-active"]:
+            return SimpleNamespace(returncode=3, stdout="failed\n")
+        return SimpleNamespace(returncode=0, stdout="")
+
+    with mock.patch.object(setup_cmd, "write_watchdog_env"), \
+            mock.patch.object(setup_cmd.shutil, "copy"), \
+            mock.patch.object(setup_cmd.subprocess, "run",
+                              side_effect=fake_run):
+        assert setup_cmd.install_service(console, {}) is False
+    is_active_calls = [c for c in calls if c[:2] == ["systemctl", "is-active"]]
+    assert len(is_active_calls) == 1
 
 
 def test_collect_returns_none_when_review_declined(fairy_dirs):

@@ -24,6 +24,13 @@ from pathlib import Path
 # Every ROS/build-tool variable plus the search paths ros2 and rclpy need to
 # find their plugins and libraries. Keep in sync with the unit documentation.
 ROS_ENV_PREFIXES = ("ROS_", "AMENT_", "RMW_", "COLCON_")
+
+# ros_fairy's own directory-override env vars (utils/paths.py) happen to start
+# with "ROS_" too, so ROS_ENV_PREFIXES would otherwise scoop them into the
+# watchdog's persisted environment file — silently redirecting the service's
+# spool/archive/index paths for anyone who has one of these set in their
+# shell. They carry no ROS meaning, so they're excluded explicitly.
+_NOT_ROS_ENV_PREFIX = "ROS_FAIRY_"
 ROS_ENV_NAMES = (
     "PATH", "LD_LIBRARY_PATH", "PYTHONPATH", "CMAKE_PREFIX_PATH",
     "CYCLONEDDS_URI", "FASTRTPS_DEFAULT_PROFILES_FILE",
@@ -62,7 +69,8 @@ def capture(environ: Mapping[str, str] | None = None) -> dict[str, str]:
     source: Mapping[str, str] = os.environ if environ is None else environ
     return {
         key: val for key, val in source.items()
-        if key in ROS_ENV_NAMES or key.startswith(ROS_ENV_PREFIXES)
+        if not key.startswith(_NOT_ROS_ENV_PREFIX)
+        and (key in ROS_ENV_NAMES or key.startswith(ROS_ENV_PREFIXES))
     }
 
 
@@ -111,6 +119,13 @@ def source_setup_bash(path: Path, timeout: float = 15.0) -> dict[str, str]:
     so the historical workaround was ``sudo su`` + manually sourcing. Doing
     the sourcing here, in Python, after root is already established, removes
     that step.
+
+    Only additions/changes are detected — a variable the script *unsets*
+    isn't reported (it's simply absent from ``after``, indistinguishable from
+    "never touched"), so a stale value from an earlier call in the same
+    process wouldn't be cleared by ``os.environ.update(changed)``. Harmless
+    for the one-shot-per-process way this is actually called (``setup``
+    sources at most once), but not a general-purpose environment diff.
     """
     script = f"source {shlex.quote(str(path))} && env -0"
     result = subprocess.run(["bash", "-c", script], capture_output=True,

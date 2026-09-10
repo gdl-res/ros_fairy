@@ -5,6 +5,17 @@ import pytest
 from ros_fairy.utils import ros_env
 
 
+def test_capture_excludes_ros_fairys_own_override_vars():
+    """ROS_FAIRY_CONFIG_DIR/VAR_DIR start with "ROS_" like real ROS vars do,
+    but must never be captured into the watchdog's persisted environment —
+    they'd silently redirect the service's spool/archive/index paths."""
+    env = {"ROS_DISTRO": "jazzy", "ROS_DOMAIN_ID": "7",
+           "ROS_FAIRY_CONFIG_DIR": "/tmp/evil/etc",
+           "ROS_FAIRY_VAR_DIR": "/tmp/evil/var"}
+    captured = ros_env.capture(env)
+    assert captured == {"ROS_DISTRO": "jazzy", "ROS_DOMAIN_ID": "7"}
+
+
 def test_capture_keeps_only_ros_variables():
     env = {"ROS_DISTRO": "jazzy", "AMENT_PREFIX_PATH": "/opt/ros/jazzy",
            "RMW_IMPLEMENTATION": "rmw_cyclonedds_cpp", "ROS_DOMAIN_ID": "7",
