@@ -2,7 +2,7 @@
 
 import pytest
 
-from fair_ros.utils import ros_env
+from ros_fairy.utils import ros_env
 
 
 def test_capture_keeps_only_ros_variables():
@@ -86,14 +86,14 @@ def test_find_setup_bash_missing_root_returns_empty(tmp_path):
 
 
 def test_source_setup_bash_returns_only_changed_vars(tmp_path, monkeypatch):
-    monkeypatch.setenv("FAIR_ROS_TEST_UNCHANGED", "same")
+    monkeypatch.setenv("ROS_FAIRY_TEST_UNCHANGED", "same")
     script = tmp_path / "setup.bash"
     script.write_text(
-        "export FAIR_ROS_TEST_NEW=hello\n"
-        "export FAIR_ROS_TEST_UNCHANGED=same\n")
+        "export ROS_FAIRY_TEST_NEW=hello\n"
+        "export ROS_FAIRY_TEST_UNCHANGED=same\n")
     changed = ros_env.source_setup_bash(script)
-    assert changed.get("FAIR_ROS_TEST_NEW") == "hello"
-    assert "FAIR_ROS_TEST_UNCHANGED" not in changed
+    assert changed.get("ROS_FAIRY_TEST_NEW") == "hello"
+    assert "ROS_FAIRY_TEST_UNCHANGED" not in changed
 
 
 def test_source_setup_bash_raises_on_failure(tmp_path):

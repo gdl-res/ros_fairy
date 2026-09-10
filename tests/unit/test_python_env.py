@@ -1,4 +1,4 @@
-"""Unit tests for fair_ros.harvest.python_env.
+"""Unit tests for ros_fairy.harvest.python_env.
 
 All subprocess and importlib.metadata calls are monkeypatched; no pip or
 real package index required.
@@ -8,7 +8,7 @@ import json
 import sys
 from unittest.mock import MagicMock
 
-import fair_ros.harvest.python_env as pe
+import ros_fairy.harvest.python_env as pe
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -87,26 +87,26 @@ def test_venv_none_when_system_interpreter(monkeypatch):
     assert result["python_env"]["venv_path"] is None
 
 
-def test_fair_ros_editable_true(monkeypatch):
+def test_ros_fairy_editable_true(monkeypatch):
     dists = [_fake_dist(
-        "fair_ros", "0.1.0",
-        direct_url={"url": "file:///home/dev/fair_ros",
+        "ros_fairy", "0.1.0",
+        direct_url={"url": "file:///home/dev/ros_fairy",
                     "dir_info": {"editable": True}})]
     monkeypatch.setattr(pe, "distributions", lambda: iter(dists))
     monkeypatch.setattr("subprocess.run", lambda *a, **kw: _completed())
     result = pe.harvest()
-    assert result["python_env"]["fair_ros_editable"] is True
+    assert result["python_env"]["ros_fairy_editable"] is True
     pkg = result["python_env"]["packages"][0]
     assert pkg["editable"] is True
-    assert pkg["location"] == "/home/dev/fair_ros"
+    assert pkg["location"] == "/home/dev/ros_fairy"
 
 
-def test_fair_ros_editable_false(monkeypatch):
-    dists = [_fake_dist("fair_ros", "0.1.0")]  # no direct_url.json
+def test_ros_fairy_editable_false(monkeypatch):
+    dists = [_fake_dist("ros_fairy", "0.1.0")]  # no direct_url.json
     monkeypatch.setattr(pe, "distributions", lambda: iter(dists))
     monkeypatch.setattr("subprocess.run", lambda *a, **kw: _completed())
     result = pe.harvest()
-    assert result["python_env"]["fair_ros_editable"] is False
+    assert result["python_env"]["ros_fairy_editable"] is False
 
 
 def test_pip_unavailable(monkeypatch):

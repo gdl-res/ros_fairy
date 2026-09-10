@@ -1,20 +1,20 @@
 from setuptools import find_packages, setup
 
-package_name = "fair_ros"
+package_name = "ros_fairy"
 
 setup(
     name=package_name,
     version="0.1.0",
     packages=find_packages(exclude=["tests", "tests.*"]),
     package_data={
-        "fair_ros.watchdog": ["fair-ros-watchdog.service"],
+        "ros_fairy.watchdog": ["ros-fairy-watchdog.service"],
     },
     data_files=[
         ("share/ament_index/resource_index/packages",
          ["resource/" + package_name]),
         ("share/" + package_name, ["package.xml"]),
         ("share/" + package_name + "/systemd",
-         ["systemd/fair-ros-watchdog.service"]),
+         ["systemd/ros-fairy-watchdog.service"]),
     ],
     install_requires=[
         "setuptools",
@@ -32,8 +32,8 @@ setup(
         "dev": ["pytest", "rocrate", "ruff", "mypy"],
     },
     zip_safe=False,
-    author="fair-ros contributors",
-    maintainer="fair-ros contributors",
+    author="ros-fairy contributors",
+    maintainer="ros-fairy contributors",
     maintainer_email="fleet@example.org",
     description="Make ROS 2 field mission data FAIR-compliant with zero "
                 "friction: automatic context capture, plain-language "
@@ -41,33 +41,33 @@ setup(
     license="Apache-2.0",
     entry_points={
         "ros2cli.command": [
-            "fairy = fair_ros.command.fair:FairCommand",
+            "fairy = ros_fairy.command.fairy:FairyCommand",
         ],
         "ros2cli.extension_point": [
-            "fairy.verb = fair_ros.subcommands:VerbExtension",
+            "fairy.verb = ros_fairy.subcommands:VerbExtension",
         ],
         "fairy.verb": [
-            "setup = fair_ros.subcommands.setup:SetupVerb",
-            "mission_start = fair_ros.subcommands.mission_start:"
+            "setup = ros_fairy.subcommands.setup:SetupVerb",
+            "mission_start = ros_fairy.subcommands.mission_start:"
             "MissionStartVerb",
-            "mission_record = fair_ros.subcommands.mission_record:"
+            "mission_record = ros_fairy.subcommands.mission_record:"
             "MissionRecordVerb",
-            "mission_close = fair_ros.subcommands.mission_close:"
+            "mission_close = ros_fairy.subcommands.mission_close:"
             "MissionCloseVerb",
-            "mission_status = fair_ros.subcommands.mission_status:"
+            "mission_status = ros_fairy.subcommands.mission_status:"
             "MissionStatusVerb",
-            "list = fair_ros.subcommands.list_missions:ListVerb",
-            "diff = fair_ros.subcommands.mission_diff:DiffVerb",
-            "verify = fair_ros.subcommands.verify:VerifyVerb",
-            "doctor = fair_ros.subcommands.doctor:DoctorVerb",
-            "export = fair_ros.subcommands.export:ExportVerb",
-            "repair = fair_ros.subcommands.repair:RepairVerb",
-            "adopt = fair_ros.subcommands.adopt:AdoptVerb",
-            "reindex = fair_ros.subcommands.reindex:ReindexVerb",
+            "list = ros_fairy.subcommands.list_missions:ListVerb",
+            "diff = ros_fairy.subcommands.mission_diff:DiffVerb",
+            "verify = ros_fairy.subcommands.verify:VerifyVerb",
+            "doctor = ros_fairy.subcommands.doctor:DoctorVerb",
+            "export = ros_fairy.subcommands.export:ExportVerb",
+            "repair = ros_fairy.subcommands.repair:RepairVerb",
+            "adopt = ros_fairy.subcommands.adopt:AdoptVerb",
+            "reindex = ros_fairy.subcommands.reindex:ReindexVerb",
         ],
         "console_scripts": [
-            "fair-ros-watchdog = fair_ros.watchdog.watchdog:main",
-            "fair-ros-setup = fair_ros.subcommands.setup:main",
+            "ros-fairy-watchdog = ros_fairy.watchdog.watchdog:main",
+            "ros-fairy-setup = ros_fairy.subcommands.setup:main",
         ],
     },
 )

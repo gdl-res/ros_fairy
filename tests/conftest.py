@@ -31,24 +31,24 @@ def pytest_collection_modifyitems(config, items):
 
 
 @pytest.fixture
-def fair_dirs(tmp_path, monkeypatch):
-    """Relocate /var/fair-ros and /etc/fair-ros into tmp_path."""
+def fairy_dirs(tmp_path, monkeypatch):
+    """Relocate /var/ros-fairy and /etc/ros-fairy into tmp_path."""
     var = tmp_path / "var"
     cfg = tmp_path / "etc"
     (var / "spool" / "bags").mkdir(parents=True)
     (var / "archive").mkdir()
     cfg.mkdir()
-    monkeypatch.setenv("FAIR_ROS_VAR_DIR", str(var))
-    monkeypatch.setenv("FAIR_ROS_CONFIG_DIR", str(cfg))
+    monkeypatch.setenv("ROS_FAIRY_VAR_DIR", str(var))
+    monkeypatch.setenv("ROS_FAIRY_CONFIG_DIR", str(cfg))
     return {"var": var, "cfg": cfg}
 
 
 @pytest.fixture
-def identity_yaml(fair_dirs):
+def identity_yaml(fairy_dirs):
     """A valid robot_identity.yaml with two sensors and one calibration."""
-    cal_file = fair_dirs["cfg"] / "gps0_cal.yaml"
+    cal_file = fairy_dirs["cfg"] / "gps0_cal.yaml"
     cal_file.write_text("offset: 0.5\n")
-    path = fair_dirs["cfg"] / "robot_identity.yaml"
+    path = fairy_dirs["cfg"] / "robot_identity.yaml"
     path.write_text(textwrap.dedent(f"""\
         robot:
           name: Heron-02

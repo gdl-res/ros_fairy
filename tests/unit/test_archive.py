@@ -3,10 +3,10 @@ import os
 
 import pytest
 
-from fair_ros.archive import assembler, index
-from fair_ros.archive.assembler import AssemblyError
-from fair_ros.manifest import builder
-from fair_ros.utils import fsio, paths
+from ros_fairy.archive import assembler, index
+from ros_fairy.archive.assembler import AssemblyError
+from ros_fairy.manifest import builder
+from ros_fairy.utils import fsio, paths
 from tests.conftest import make_bag
 
 T0 = 1_750_000_000.0
@@ -17,9 +17,9 @@ def _steady(start, end, hz):
     return [start + i / hz for i in range(n + 1)]
 
 
-def _spool(fair_dirs, n_bags=1, with_cal=True):
+def _spool(fairy_dirs, n_bags=1, with_cal=True):
     """Populate the spool with real bags + harvest + context documents."""
-    cal_file = fair_dirs["cfg"] / "gps0.yaml"
+    cal_file = fairy_dirs["cfg"] / "gps0.yaml"
     cal_file.write_text("fx: 1\n")
     identity = {
         "robot": {"name": "Heron-02", "platform": "Clearpath Heron USV",
@@ -63,7 +63,7 @@ def _spool(fair_dirs, n_bags=1, with_cal=True):
                 "packages": [{"name": "rclpy", "version": "5.0.0",
                               "installer": "apt", "editable": False,
                               "location": None}],
-                "fair_ros_editable": False,
+                "ros_fairy_editable": False,
                 "sys_path": ["/opt/venv/lib/python3.12/site-packages"]},
             "pip_freeze": "rclpy==5.0.0\n",
             "pip_list_json": None},
@@ -106,9 +106,9 @@ def test_sanitise():
     assert assembler.sanitise("///") == "unknown"
 
 
-def test_assemble_full_crate(fair_dirs):
-    harvest, context = _spool(fair_dirs)
-    from fair_ros.utils import ros_env
+def test_assemble_full_crate(fairy_dirs):
+    harvest, context = _spool(fairy_dirs)
+    from ros_fairy.utils import ros_env
     ros_env.write_file(paths.session_env_path(), {"ROS_DOMAIN_ID": "7"})
     record = builder.build(harvest, context)
     final = assembler.assemble(record, harvest)
@@ -153,8 +153,8 @@ def test_assemble_full_crate(fair_dirs):
     assert rows[0]["bag_count"] == 1
 
 
-def test_ro_crate_document(fair_dirs):
-    harvest, context = _spool(fair_dirs)
+def test_ro_crate_document(fairy_dirs):
+    harvest, context = _spool(fairy_dirs)
     record = builder.build(harvest, context)
     final = assembler.assemble(record, harvest)
     doc = json.loads((final / "ro-crate-metadata.json").read_text())
@@ -232,7 +232,7 @@ def test_ro_crate_document(fair_dirs):
 def test_readme_flags_identifying_serials():
     from datetime import datetime, timezone
 
-    from fair_ros.manifest.schema import (
+    from ros_fairy.manifest.schema import (
         HardwareDevice,
         Identity,
         Intent,
@@ -245,14 +245,14 @@ def test_readme_flags_identifying_serials():
                           created_at=datetime(2026, 6, 12, tzinfo=timezone.utc),
                           operator_name="Jane"),
         intent=Intent(goal="Survey", location_name="lab"),
-        software=Software(fair_ros_version="0.1.0"),
+        software=Software(ros_fairy_version="0.1.0"),
         hardware_devices=[
             HardwareDevice(source_command="lsusb", device_class="usb",
                            product_name="u-blox ZED-F9P",
                            serial_number="3C123"),
             HardwareDevice(source_command="glob:/dev/video*",
                            device_class="video", device_path="/dev/video0")],
-        provenance=Provenance(fair_ros_version="0.1.0", schema_version="1.0",
+        provenance=Provenance(ros_fairy_version="0.1.0", schema_version="1.0",
                               hostname="h", kernel="Linux", arch="x86_64"))
     md = assembler._render_readme(rec, [])
     assert "## Connected hardware" in md
@@ -265,9 +265,9 @@ def test_readme_flags_identifying_serials():
     assert "Connected hardware" not in assembler._render_readme(rec, [])
 
 
-def test_archive_name_includes_time_to_seconds(fair_dirs):
+def test_archive_name_includes_time_to_seconds(fairy_dirs):
     import re
-    harvest, context = _spool(fair_dirs)
+    harvest, context = _spool(fairy_dirs)
     record = builder.build(harvest, context)
     name = assembler.archive_name(record)
     # YYYY-MM-DD_HH-MM-SS_<location>_<operator>
@@ -275,12 +275,12 @@ def test_archive_name_includes_time_to_seconds(fair_dirs):
     assert name.endswith("_marsh-creek-north-bank_jane-doe")
 
 
-def test_archive_name_collision(fair_dirs):
-    harvest, context = _spool(fair_dirs, n_bags=2)
+def test_archive_name_collision(fairy_dirs):
+    harvest, context = _spool(fairy_dirs, n_bags=2)
     record = builder.build(harvest, context)
     first = assembler.assemble(record, harvest)
 
-    harvest2, context2 = _spool(fair_dirs)
+    harvest2, context2 = _spool(fairy_dirs)
     context2["identity"]["created_at"] = context["identity"]["created_at"]
     record2 = builder.build(harvest2, context2)
     record2.identity.created_at = record.identity.created_at
@@ -288,8 +288,8 @@ def test_archive_name_collision(fair_dirs):
     assert second.name == first.name + "_2"
 
 
-def test_failure_before_bag_move_leaves_spool_intact(fair_dirs, monkeypatch):
-    harvest, context = _spool(fair_dirs)
+def test_failure_before_bag_move_leaves_spool_intact(fairy_dirs, monkeypatch):
+    harvest, context = _spool(fairy_dirs)
     record = builder.build(harvest, context)
 
     def boom(*a, **kw):
@@ -304,8 +304,8 @@ def test_failure_before_bag_move_leaves_spool_intact(fair_dirs, monkeypatch):
     assert not list(paths.staging_dir().glob("*"))
 
 
-def test_bag_move_failure_rolls_back(fair_dirs, monkeypatch):
-    harvest, context = _spool(fair_dirs, n_bags=2)
+def test_bag_move_failure_rolls_back(fairy_dirs, monkeypatch):
+    harvest, context = _spool(fairy_dirs, n_bags=2)
     record = builder.build(harvest, context)
 
     real_move = assembler._move_bag
@@ -325,8 +325,8 @@ def test_bag_move_failure_rolls_back(fair_dirs, monkeypatch):
     assert not list(paths.staging_dir().glob("*"))
 
 
-def test_resume_interrupted_staging(fair_dirs):
-    harvest, context = _spool(fair_dirs)
+def test_resume_interrupted_staging(fairy_dirs):
+    harvest, context = _spool(fairy_dirs)
     record = builder.build(harvest, context)
     name = assembler.archive_name(record)
     staging = paths.staging_dir() / name
@@ -343,8 +343,8 @@ def test_resume_interrupted_staging(fair_dirs):
     assert total == 1
 
 
-def test_index_filters(fair_dirs):
-    harvest, context = _spool(fair_dirs)
+def test_index_filters(fairy_dirs):
+    harvest, context = _spool(fairy_dirs)
     record = builder.build(harvest, context)
     assembler.assemble(record, harvest)
 
@@ -360,8 +360,8 @@ def test_index_filters(fair_dirs):
     assert rows == [] and total == 1
 
 
-def test_index_quality_filter(fair_dirs):
-    harvest, context = _spool(fair_dirs)
+def test_index_quality_filter(fairy_dirs):
+    harvest, context = _spool(fairy_dirs)
     record = builder.build(harvest, context)
     record.provenance.data_quality = "poor"
     index.insert(record, paths.archive_dir() / "x")
@@ -372,16 +372,16 @@ def test_index_quality_filter(fair_dirs):
     assert total == 0
 
 
-def test_index_query_missing_db_is_empty(fair_dirs):
+def test_index_query_missing_db_is_empty(fairy_dirs):
     # No index yet and no write access wouldn't even create one — a missing
     # file simply means no missions.
     assert index.query() == ([], 0)
 
 
-def test_index_query_reads_readonly_db(fair_dirs):
-    # An account that can read but not write the index (not in the fair-ros
+def test_index_query_reads_readonly_db(fairy_dirs):
+    # An account that can read but not write the index (not in the ros-fairy
     # group but db/dir readable) must still be able to list missions.
-    harvest, context = _spool(fair_dirs)
+    harvest, context = _spool(fairy_dirs)
     record = builder.build(harvest, context)
     index.insert(record, paths.archive_dir() / "x")
     db = paths.index_db_path()
@@ -394,11 +394,11 @@ def test_index_query_reads_readonly_db(fair_dirs):
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores file modes")
-def test_index_query_unreadable_raises_plain_error(fair_dirs):
+def test_index_query_unreadable_raises_plain_error(fairy_dirs):
     # An index this account can't open (e.g. WAL recovery needs directory
-    # write access the fair-ros group has and we don't) must surface as a
+    # write access the ros-fairy group has and we don't) must surface as a
     # plain-language IndexUnavailableError, not a traceback.
-    harvest, context = _spool(fair_dirs)
+    harvest, context = _spool(fairy_dirs)
     record = builder.build(harvest, context)
     index.insert(record, paths.archive_dir() / "x")
     db = paths.index_db_path()
@@ -406,13 +406,13 @@ def test_index_query_unreadable_raises_plain_error(fair_dirs):
     try:
         with pytest.raises(index.IndexUnavailableError) as exc:
             index.query()
-        assert "fair-ros' group" in str(exc.value)
+        assert "ros-fairy' group" in str(exc.value)
     finally:
         db.chmod(0o644)
 
 
-def test_reindex_rebuilds(fair_dirs):
-    harvest, context = _spool(fair_dirs)
+def test_reindex_rebuilds(fairy_dirs):
+    harvest, context = _spool(fairy_dirs)
     record = builder.build(harvest, context)
     final = assembler.assemble(record, harvest)
     paths.index_db_path().unlink()
@@ -421,15 +421,15 @@ def test_reindex_rebuilds(fair_dirs):
     assert rows[0]["archive_path"] == str(final)
 
 
-def test_find_similar_flags_mistyped_location(fair_dirs):
-    from fair_ros.archive import duplicates
+def test_find_similar_flags_mistyped_location(fairy_dirs):
+    from ros_fairy.archive import duplicates
     # Save a "Crosslab" mission.
-    harvest, context = _spool(fair_dirs)
+    harvest, context = _spool(fairy_dirs)
     context["intent"]["location_name"] = "Crosslab"
     assembler.assemble(builder.build(harvest, context), harvest)
 
     # A second mission, same operator/time, location mistyped "Crossloab".
-    harvest2, context2 = _spool(fair_dirs)
+    harvest2, context2 = _spool(fairy_dirs)
     context2["intent"]["location_name"] = "Crossloab"
     context2["identity"]["created_at"] = context["identity"]["created_at"]
     record2 = builder.build(harvest2, context2)
@@ -440,28 +440,28 @@ def test_find_similar_flags_mistyped_location(fair_dirs):
     assert "typo" in duplicates.describe(record2, matches[0])
 
 
-def test_find_similar_ignores_unrelated(fair_dirs):
-    from fair_ros.archive import duplicates
-    harvest, context = _spool(fair_dirs)
+def test_find_similar_ignores_unrelated(fairy_dirs):
+    from ros_fairy.archive import duplicates
+    harvest, context = _spool(fairy_dirs)
     context["intent"]["location_name"] = "Crosslab"
     assembler.assemble(builder.build(harvest, context), harvest)
 
-    harvest2, context2 = _spool(fair_dirs)
+    harvest2, context2 = _spool(fairy_dirs)
     context2["intent"]["location_name"] = "Harbour East Dock"
     context2["identity"]["created_at"] = context["identity"]["created_at"]
     assert duplicates.find_similar(builder.build(harvest2, context2)) == []
 
 
-def test_find_similar_respects_time_window(fair_dirs):
+def test_find_similar_respects_time_window(fairy_dirs):
     from datetime import timedelta
 
-    from fair_ros.archive import duplicates
-    harvest, context = _spool(fair_dirs)
+    from ros_fairy.archive import duplicates
+    harvest, context = _spool(fairy_dirs)
     context["intent"]["location_name"] = "Crosslab"
     saved = builder.build(harvest, context)
     assembler.assemble(saved, harvest)
 
-    harvest2, context2 = _spool(fair_dirs)
+    harvest2, context2 = _spool(fairy_dirs)
     context2["intent"]["location_name"] = "Crosslab"
     record2 = builder.build(harvest2, context2)
     # Same place, but three days later -> outside the default 24h window.
@@ -469,8 +469,8 @@ def test_find_similar_respects_time_window(fair_dirs):
     assert duplicates.find_similar(record2) == []
 
 
-def test_index_persists_data_quality(fair_dirs):
-    harvest, context = _spool(fair_dirs)
+def test_index_persists_data_quality(fairy_dirs):
+    harvest, context = _spool(fairy_dirs)
     record = builder.build(harvest, context)
     record.provenance.data_quality = "poor"
     index.insert(record, paths.archive_dir() / "x")
@@ -478,7 +478,7 @@ def test_index_persists_data_quality(fair_dirs):
     assert rows[0]["data_quality"] == "poor"
 
 
-def test_index_migrates_pre_v2_database(fair_dirs):
+def test_index_migrates_pre_v2_database(fairy_dirs):
     import sqlite3
     # A v1 database has no data_quality column; _connect must add it.
     paths.index_db_path().parent.mkdir(parents=True, exist_ok=True)
@@ -487,11 +487,11 @@ def test_index_migrates_pre_v2_database(fair_dirs):
                 "created_at TEXT, operator TEXT, location TEXT, goal TEXT, "
                 "archive_path TEXT UNIQUE, duration_s REAL, size_bytes INTEGER, "
                 "bag_count INTEGER, warning_count INTEGER, robot_name TEXT, "
-                "fair_ros_version TEXT, schema_version TEXT)")
+                "ros_fairy_version TEXT, schema_version TEXT)")
     con.commit()
     con.close()
 
-    harvest, context = _spool(fair_dirs)
+    harvest, context = _spool(fairy_dirs)
     record = builder.build(harvest, context)
     record.provenance.data_quality = "degraded"
     index.insert(record, paths.archive_dir() / "x")  # must not raise

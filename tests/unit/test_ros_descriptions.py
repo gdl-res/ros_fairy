@@ -9,7 +9,7 @@ import sys
 import types
 from types import SimpleNamespace
 
-from fair_ros.harvest import ros_descriptions
+from ros_fairy.harvest import ros_descriptions
 
 
 def _fake_transform():

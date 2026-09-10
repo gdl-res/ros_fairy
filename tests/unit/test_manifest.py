@@ -1,8 +1,8 @@
 import pytest
 
-import fair_ros
-from fair_ros.manifest import builder, validator
-from fair_ros.manifest.builder import ManifestError
+import ros_fairy
+from ros_fairy.manifest import builder, validator
+from ros_fairy.manifest.builder import ManifestError
 
 GRAPH = {
     "captured_at": "2026-06-12T14:03:00+00:00",
@@ -57,7 +57,7 @@ def test_compose_harvest_sensor_liveness():
     by_id = {s["sensor_id"]: s for s in h["sensors"]}
     assert by_id["gps0"]["detected_at_start"] is True
     assert by_id["sonar0"]["detected_at_start"] is False
-    assert h["software"]["fair_ros_version"] == fair_ros.__version__
+    assert h["software"]["ros_fairy_version"] == ros_fairy.__version__
     assert h["provenance"]["harvest_status"] == STATUS
 
 
@@ -179,10 +179,10 @@ def test_harvest_level_warnings():
     assert "recording assistant" in builder.harvest_level_warnings(None)[0]
 
 
-def test_load_spool(fair_dirs):
+def test_load_spool(fairy_dirs):
     import json
 
-    from fair_ros.utils import paths
+    from ros_fairy.utils import paths
     assert builder.load_spool() == (None, None)
     paths.harvest_json_path().write_text(json.dumps(_harvest()))
     paths.mission_context_path().write_text(json.dumps(_context()))

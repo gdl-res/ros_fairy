@@ -9,8 +9,8 @@ from unittest import mock
 import pytest
 from rich.console import Console
 
-from fair_ros.manifest import builder
-from fair_ros.subcommands import (
+from ros_fairy.manifest import builder
+from ros_fairy.subcommands import (
     doctor,
     export,
     list_missions,
@@ -21,8 +21,8 @@ from fair_ros.subcommands import (
     mission_status,
     repair,
 )
-from fair_ros.subcommands import setup as setup_cmd
-from fair_ros.utils import clock, fsio, paths
+from ros_fairy.subcommands import setup as setup_cmd
+from ros_fairy.utils import clock, fsio, paths
 from tests.unit.test_archive import _spool
 
 
@@ -35,7 +35,7 @@ ARGS = SimpleNamespace()
 
 # --- mission_start -----------------------------------------------------------
 
-def test_mission_start_writes_context(fair_dirs):
+def test_mission_start_writes_context(fairy_dirs):
     answers = {"operator_name": "Jane", "goal": "Map the creek",
                "location_name": "Marsh Creek", "environment": None,
                "notes": None}
@@ -49,9 +49,9 @@ def test_mission_start_writes_context(fair_dirs):
     assert "mission_record" in console.file.getvalue()
 
 
-def test_mission_start_snapshots_session_ros_env(fair_dirs):
+def test_mission_start_snapshots_session_ros_env(fairy_dirs):
     """The recording shell's ROS env is handed to the watchdog (issue #29)."""
-    from fair_ros.utils import ros_env
+    from ros_fairy.utils import ros_env
     answers = {"operator_name": "Jane", "goal": "g", "location_name": "L",
                "environment": None, "notes": None}
     with mock.patch.object(mission_start.briefing, "ask_briefing",
@@ -63,9 +63,9 @@ def test_mission_start_snapshots_session_ros_env(fair_dirs):
     assert env.get("ROS_DISTRO") == "jazzy" and env.get("ROS_DOMAIN_ID") == "9"
 
 
-def test_mission_record_snapshots_session_ros_env(fair_dirs):
-    _spool(fair_dirs)
-    from fair_ros.utils import ros_env
+def test_mission_record_snapshots_session_ros_env(fairy_dirs):
+    _spool(fairy_dirs)
+    from ros_fairy.utils import ros_env
     with mock.patch.object(mission_record.shutil, "which",
                            return_value="/usr/bin/ros2"), \
             mock.patch.object(mission_record.clock, "is_synchronized",
@@ -79,7 +79,7 @@ def test_mission_record_snapshots_session_ros_env(fair_dirs):
     assert env.get("ROS_DOMAIN_ID") == "9"
 
 
-def test_mission_start_keeps_existing_when_declined(fair_dirs):
+def test_mission_start_keeps_existing_when_declined(fairy_dirs):
     existing = builder.new_mission_context("Sam", "Old goal", "Old place")
     fsio.atomic_write_json(paths.mission_context_path(), existing)
     with mock.patch.object(mission_start.Confirm, "ask",
@@ -91,7 +91,7 @@ def test_mission_start_keeps_existing_when_declined(fair_dirs):
 
 # --- mission_record ----------------------------------------------------------
 
-def test_mission_record_requires_ros2(fair_dirs):
+def test_mission_record_requires_ros2(fairy_dirs):
     console = _console()
     with mock.patch.object(mission_record.shutil, "which",
                            return_value=None):
@@ -116,8 +116,8 @@ def test_clock_warning_points_to_repair():
     assert "ros2 fairy repair" in clock.WARNING
 
 
-def test_mission_record_aborts_on_unsynced_clock(fair_dirs):
-    _spool(fair_dirs)  # a mission context, so the briefing prompt is skipped
+def test_mission_record_aborts_on_unsynced_clock(fairy_dirs):
+    _spool(fairy_dirs)  # a mission context, so the briefing prompt is skipped
     console = _console()
     with mock.patch.object(mission_record.shutil, "which",
                            return_value="/usr/bin/ros2"), \
@@ -133,12 +133,12 @@ def test_mission_record_aborts_on_unsynced_clock(fair_dirs):
     assert not paths.session_env_path().exists()
 
 
-def test_build_record_command_default(fair_dirs):
+def test_build_record_command_default(fairy_dirs):
     cmd = mission_record.build_record_command("/out")
     assert cmd == ["ros2", "bag", "record", "--all", "--output", "/out"]
 
 
-def test_build_record_command_from_identity(fair_dirs, identity_yaml):
+def test_build_record_command_from_identity(fairy_dirs, identity_yaml):
     text = identity_yaml.read_text() + \
         "recording:\n  topics: [/fix, /depth]\n  storage: mcap\n"
     identity_yaml.write_text(text)
@@ -149,14 +149,14 @@ def test_build_record_command_from_identity(fair_dirs, identity_yaml):
 
 # --- mission_close -----------------------------------------------------------
 
-def test_mission_close_nothing_recorded(fair_dirs):
+def test_mission_close_nothing_recorded(fairy_dirs):
     console = _console()
     assert mission_close.run(ARGS, console=console) == 1
     assert "nothing recorded" in console.file.getvalue()
 
 
-def test_mission_close_blocks_while_recording(fair_dirs):
-    _spool(fair_dirs)
+def test_mission_close_blocks_while_recording(fairy_dirs):
+    _spool(fairy_dirs)
     fsio.atomic_write_json(paths.watchdog_state_path(), {
         "pid": os.getpid(), "state": "RECORDING"})
     console = _console()
@@ -164,8 +164,8 @@ def test_mission_close_blocks_while_recording(fair_dirs):
     assert "still in progress" in console.file.getvalue()
 
 
-def test_mission_close_save_flow(fair_dirs):
-    _spool(fair_dirs)
+def test_mission_close_save_flow(fairy_dirs):
+    _spool(fairy_dirs)
     console = _console()
     with mock.patch.object(mission_close.review, "confirm_save",
                            return_value="save"):
@@ -179,8 +179,8 @@ def test_mission_close_save_flow(fair_dirs):
     assert not paths.mission_context_path().exists()
 
 
-def test_mission_close_discard_flow(fair_dirs):
-    _spool(fair_dirs)
+def test_mission_close_discard_flow(fairy_dirs):
+    _spool(fairy_dirs)
     console = _console()
     with mock.patch.object(mission_close.review, "confirm_save",
                            return_value="discard"):
@@ -190,9 +190,9 @@ def test_mission_close_discard_flow(fair_dirs):
     assert not paths.harvest_json_path().exists()
 
 
-def test_mission_close_discard_clears_session_env(fair_dirs):
-    _spool(fair_dirs)
-    from fair_ros.utils import ros_env
+def test_mission_close_discard_clears_session_env(fairy_dirs):
+    _spool(fairy_dirs)
+    from ros_fairy.utils import ros_env
     ros_env.write_file(paths.session_env_path(), {"ROS_DOMAIN_ID": "7"})
     with mock.patch.object(mission_close.review, "confirm_save",
                            return_value="discard"):
@@ -202,8 +202,8 @@ def test_mission_close_discard_clears_session_env(fair_dirs):
     assert not paths.session_env_path().exists()
 
 
-def test_mission_close_keep_flow(fair_dirs):
-    _spool(fair_dirs)
+def test_mission_close_keep_flow(fairy_dirs):
+    _spool(fairy_dirs)
     console = _console()
     with mock.patch.object(mission_close.review, "confirm_save",
                            return_value="keep"):
@@ -212,8 +212,8 @@ def test_mission_close_keep_flow(fair_dirs):
     assert any(paths.bags_dir().iterdir())
 
 
-def test_mission_close_gap_fill_briefing(fair_dirs):
-    _spool(fair_dirs)
+def test_mission_close_gap_fill_briefing(fairy_dirs):
+    _spool(fairy_dirs)
     paths.mission_context_path().unlink()
     answers = {"operator_name": "Sam", "goal": "Salvage run",
                "location_name": "Pier 4"}
@@ -231,9 +231,9 @@ def test_mission_close_gap_fill_briefing(fair_dirs):
     assert record["intent"]["location_name"] == "Pier 4"
 
 
-def test_mission_close_salvages_unfinalised_bag(fair_dirs):
+def test_mission_close_salvages_unfinalised_bag(fairy_dirs):
     # bags exist but the watchdog never wrote harvest.json
-    _spool(fair_dirs)
+    _spool(fairy_dirs)
     paths.harvest_json_path().unlink()
     console = _console()
     with mock.patch.object(mission_close.review, "confirm_save",
@@ -250,7 +250,7 @@ def test_mission_close_salvages_unfinalised_bag(fair_dirs):
 
 # --- mission_status / list ----------------------------------------------------
 
-def test_mission_status_json(fair_dirs, capsys):
+def test_mission_status_json(fairy_dirs, capsys):
     args = SimpleNamespace(json=True)
     assert mission_status.run(args, console=_console()) == 0
     data = json.loads(capsys.readouterr().out)
@@ -258,16 +258,16 @@ def test_mission_status_json(fair_dirs, capsys):
     assert data["watchdog_state"] is None
 
 
-def test_list_no_index(fair_dirs):
+def test_list_no_index(fairy_dirs):
     console = _console()
     assert list_missions.run(SimpleNamespace(), console=console) == 0
     assert "No missions have been saved" in console.file.getvalue()
 
 
-def test_list_shows_missions(fair_dirs):
-    harvest, context = _spool(fair_dirs)
+def test_list_shows_missions(fairy_dirs):
+    harvest, context = _spool(fairy_dirs)
     record = builder.build(harvest, context)
-    from fair_ros.archive import assembler
+    from ros_fairy.archive import assembler
     assembler.assemble(record, harvest)
 
     console = _console()
@@ -285,9 +285,9 @@ def test_list_shows_missions(fair_dirs):
     assert "No missions found" in console.file.getvalue()
 
 
-def test_list_json(fair_dirs, capsys):
-    from fair_ros.archive import assembler
-    harvest, context = _spool(fair_dirs)
+def test_list_json(fairy_dirs, capsys):
+    from ros_fairy.archive import assembler
+    harvest, context = _spool(fairy_dirs)
     assembler.assemble(builder.build(harvest, context), harvest)
 
     args = SimpleNamespace(operator=None, location=None, since=None,
@@ -300,18 +300,18 @@ def test_list_json(fair_dirs, capsys):
     assert data["missions"][0]["goal"] == "Survey eelgrass beds"
 
 
-def test_list_json_no_index(fair_dirs, capsys):
+def test_list_json_no_index(fairy_dirs, capsys):
     args = SimpleNamespace(json=True)
     assert list_missions.run(args, console=_console()) == 0
     data = json.loads(capsys.readouterr().out)
     assert data == {"missions": [], "total": 0, "shown": 0}
 
 
-def test_diff_json(fair_dirs, capsys):
-    from fair_ros.archive import assembler
-    h1, c1 = _spool(fair_dirs)
+def test_diff_json(fairy_dirs, capsys):
+    from ros_fairy.archive import assembler
+    h1, c1 = _spool(fairy_dirs)
     assembler.assemble(builder.build(h1, c1), h1)
-    h2, c2 = _spool(fair_dirs)
+    h2, c2 = _spool(fairy_dirs)
     c2["intent"]["goal"] = "A different goal entirely"
     assembler.assemble(builder.build(h2, c2), h2)
 
@@ -326,7 +326,7 @@ def test_diff_json(fair_dirs, capsys):
 
 # --- setup ---------------------------------------------------------------------
 
-def test_run_as_normal_user_needs_no_root_until_apply(fair_dirs):
+def test_run_as_normal_user_needs_no_root_until_apply(fairy_dirs):
     """The default flow: the wizard runs unprivileged; only the commit step
     (`_apply`, run via sudo) touches anything that needs root."""
     console = _console()
@@ -350,7 +350,7 @@ def test_run_as_normal_user_needs_no_root_until_apply(fair_dirs):
     assert "password" in console.file.getvalue().lower()
 
 
-def test_run_as_root_applies_directly_no_sudo_reexec(fair_dirs):
+def test_run_as_root_applies_directly_no_sudo_reexec(fairy_dirs):
     console = _console()
     config = {"robot": {"name": "X"}}
     with mock.patch.object(setup_cmd.os, "geteuid", return_value=0), \
@@ -371,7 +371,7 @@ def test_run_as_root_applies_directly_no_sudo_reexec(fair_dirs):
     apply_sudo.assert_not_called()
 
 
-def test_run_declined_review_writes_nothing(fair_dirs):
+def test_run_declined_review_writes_nothing(fairy_dirs):
     console = _console()
     with mock.patch.object(setup_cmd.os, "geteuid", return_value=1000), \
             mock.patch.object(setup_cmd, "_check_ros_visible",
@@ -384,7 +384,7 @@ def test_run_declined_review_writes_nothing(fair_dirs):
     apply_sudo.assert_not_called()
 
 
-def test_run_apply_from_stdin_requires_root(fair_dirs):
+def test_run_apply_from_stdin_requires_root(fairy_dirs):
     console = _console()
     args = SimpleNamespace(apply_from_stdin=True, debug=False)
     with mock.patch.object(setup_cmd.os, "geteuid", return_value=1000):
@@ -392,7 +392,7 @@ def test_run_apply_from_stdin_requires_root(fair_dirs):
     assert "internal" in console.file.getvalue().lower()
 
 
-def test_run_apply_from_stdin_applies_the_staged_payload(fair_dirs, monkeypatch):
+def test_run_apply_from_stdin_applies_the_staged_payload(fairy_dirs, monkeypatch):
     console = _console()
     args = SimpleNamespace(apply_from_stdin=True, debug=False)
     payload = {"config": {"robot": {"name": "X"}},
@@ -405,7 +405,7 @@ def test_run_apply_from_stdin_applies_the_staged_payload(fair_dirs, monkeypatch)
     apply_mock.assert_called_once_with(console, payload)
 
 
-def test_apply_via_sudo_pipes_payload_over_stdin(fair_dirs):
+def test_apply_via_sudo_pipes_payload_over_stdin(fairy_dirs):
     console = _console()
     payload = {"config": {"a": 1}, "env": {"b": 2}}
     with mock.patch.object(setup_cmd.shutil, "which",
@@ -419,14 +419,14 @@ def test_apply_via_sudo_pipes_payload_over_stdin(fair_dirs):
     assert json.loads(kwargs["input"]) == payload
 
 
-def test_apply_via_sudo_missing_sudo_binary(fair_dirs):
+def test_apply_via_sudo_missing_sudo_binary(fairy_dirs):
     console = _console()
     with mock.patch.object(setup_cmd.shutil, "which", return_value=None):
         assert setup_cmd._apply_via_sudo(console, {}) == 1
     assert "sudo" in console.file.getvalue().lower()
 
 
-def test_apply_writes_identity_dirs_and_service_with_given_env(fair_dirs):
+def test_apply_writes_identity_dirs_and_service_with_given_env(fairy_dirs):
     console = _console()
     payload = {"config": {"robot": {"name": "X"}},
                "env": {"ROS_DISTRO": "jazzy"}}
@@ -441,7 +441,7 @@ def test_apply_writes_identity_dirs_and_service_with_given_env(fair_dirs):
     inst.assert_called_once_with(console, payload["env"])
 
 
-def test_collect_returns_none_when_review_declined(fair_dirs):
+def test_collect_returns_none_when_review_declined(fairy_dirs):
     console = _console()
     config = {"robot": {"name": "X", "platform": "P", "serial_number": "S"},
               "owner": {"organization": "O", "contact_email": "a@b.c"}}
@@ -453,7 +453,7 @@ def test_collect_returns_none_when_review_declined(fair_dirs):
     assert "Nothing was written" in console.file.getvalue()
 
 
-def test_collect_returns_config_when_review_confirmed(fair_dirs):
+def test_collect_returns_config_when_review_confirmed(fairy_dirs):
     console = _console()
     config = {"robot": {"name": "X", "platform": "P", "serial_number": "S"},
               "owner": {"organization": "O", "contact_email": "a@b.c"}}
@@ -464,9 +464,9 @@ def test_collect_returns_config_when_review_confirmed(fair_dirs):
         assert setup_cmd._collect(console) == config
 
 
-# --- setup: self-sourcing ROS (`fair-ros-setup`, no pre-sourced shell) --------
+# --- setup: self-sourcing ROS (`ros-fairy-setup`, no pre-sourced shell) --------
 
-def test_ensure_ros_environment_already_sourced_is_a_noop(fair_dirs):
+def test_ensure_ros_environment_already_sourced_is_a_noop(fairy_dirs):
     with mock.patch.object(setup_cmd.shutil, "which", return_value="/bin/ros2"), \
             mock.patch.dict(setup_cmd.os.environ, {"ROS_DISTRO": "jazzy"}), \
             mock.patch.object(setup_cmd.ros_env, "source_setup_bash") as src:
@@ -474,7 +474,7 @@ def test_ensure_ros_environment_already_sourced_is_a_noop(fair_dirs):
     src.assert_not_called()
 
 
-def test_ensure_ros_environment_autodetects_single_install(fair_dirs, tmp_path):
+def test_ensure_ros_environment_autodetects_single_install(fairy_dirs, tmp_path):
     setup_bash = tmp_path / "jazzy" / "setup.bash"
     setup_bash.parent.mkdir()
     setup_bash.write_text("")
@@ -491,7 +491,7 @@ def test_ensure_ros_environment_autodetects_single_install(fair_dirs, tmp_path):
 
 
 def test_ensure_ros_environment_explicit_path_overrides_autodetect(
-        fair_dirs, tmp_path):
+        fairy_dirs, tmp_path):
     explicit = tmp_path / "custom" / "setup.bash"
     explicit.parent.mkdir()
     explicit.write_text("")
@@ -507,7 +507,7 @@ def test_ensure_ros_environment_explicit_path_overrides_autodetect(
     src.assert_called_once_with(explicit)
 
 
-def test_ensure_ros_environment_explicit_path_missing(fair_dirs, tmp_path):
+def test_ensure_ros_environment_explicit_path_missing(fairy_dirs, tmp_path):
     console = _console()
     with mock.patch.object(setup_cmd.shutil, "which", return_value=None):
         ok = setup_cmd._ensure_ros_environment(
@@ -516,7 +516,7 @@ def test_ensure_ros_environment_explicit_path_missing(fair_dirs, tmp_path):
     assert "doesn't exist" in console.file.getvalue()
 
 
-def test_ensure_ros_environment_ambiguous_installs(fair_dirs, tmp_path):
+def test_ensure_ros_environment_ambiguous_installs(fairy_dirs, tmp_path):
     a, b = tmp_path / "a" / "setup.bash", tmp_path / "b" / "setup.bash"
     console = _console()
     with mock.patch.object(setup_cmd.shutil, "which", return_value=None), \
@@ -529,7 +529,7 @@ def test_ensure_ros_environment_ambiguous_installs(fair_dirs, tmp_path):
     assert "--ros-setup" in console.file.getvalue()
 
 
-def test_ensure_ros_environment_no_install_found(fair_dirs):
+def test_ensure_ros_environment_no_install_found(fairy_dirs):
     console = _console()
     with mock.patch.object(setup_cmd.shutil, "which", return_value=None), \
             mock.patch.dict(setup_cmd.os.environ, {}, clear=True), \
@@ -540,7 +540,7 @@ def test_ensure_ros_environment_no_install_found(fair_dirs):
     assert "--ros-setup" in console.file.getvalue()
 
 
-def test_ensure_ros_environment_source_failure_is_reported(fair_dirs, tmp_path):
+def test_ensure_ros_environment_source_failure_is_reported(fairy_dirs, tmp_path):
     setup_bash = tmp_path / "jazzy" / "setup.bash"
     setup_bash.parent.mkdir()
     setup_bash.write_text("")
@@ -556,7 +556,7 @@ def test_ensure_ros_environment_source_failure_is_reported(fair_dirs, tmp_path):
     assert "boom" in console.file.getvalue()
 
 
-def test_ensure_ros_environment_sourced_but_still_no_ros2(fair_dirs, tmp_path):
+def test_ensure_ros_environment_sourced_but_still_no_ros2(fairy_dirs, tmp_path):
     """Sourcing succeeded but ros2 still isn't found — a non-ROS script."""
     setup_bash = tmp_path / "jazzy" / "setup.bash"
     setup_bash.parent.mkdir()
@@ -573,7 +573,7 @@ def test_ensure_ros_environment_sourced_but_still_no_ros2(fair_dirs, tmp_path):
     assert "still can't find ros2" in console.file.getvalue()
 
 
-def test_setup_ask_robot_validates_email(fair_dirs):
+def test_setup_ask_robot_validates_email(fairy_dirs):
     answers = iter(["Heron-02", "Clearpath Heron", "H02", "Lab",
                     "not-an-email", "fleet@example.org"])
     with mock.patch.object(setup_cmd.Prompt, "ask",
@@ -582,7 +582,7 @@ def test_setup_ask_robot_validates_email(fair_dirs):
     assert config["owner"]["contact_email"] == "fleet@example.org"
 
 
-def test_setup_ask_sensors_keeps_existing_on_rerun(fair_dirs):
+def test_setup_ask_sensors_keeps_existing_on_rerun(fairy_dirs):
     # Re-running setup and declining the add-loop must not wipe the sensors
     # already configured (idempotency: current values are the defaults).
     current = {
@@ -601,7 +601,7 @@ def test_setup_ask_sensors_keeps_existing_on_rerun(fair_dirs):
     assert calibrations == current["calibrations"]
 
 
-def test_setup_ask_sensors_can_drop_existing(fair_dirs):
+def test_setup_ask_sensors_can_drop_existing(fairy_dirs):
     current = {"sensors": [{"sensor_id": "gps0", "type": "gps",
                             "make_model": "x", "topic": "/fix"}]}
     # Keep? → False, Add? → False
@@ -646,7 +646,7 @@ def test_repair_command_skips_healthy_bag(tmp_path):
     assert not out.exists()
 
 
-def test_repair_command_unknown_target(fair_dirs):
+def test_repair_command_unknown_target(fairy_dirs):
     args = SimpleNamespace(mission="nope", output=None, all=False,
                            duration=None, force=False, json=False)
     assert repair.run(args, console=_console()) == 1
@@ -654,16 +654,16 @@ def test_repair_command_unknown_target(fair_dirs):
 
 # --- data quality / degradation gate -----------------------------------------
 
-def test_quality_ok_for_healthy_mission(fair_dirs):
-    from fair_ros.manifest import quality
-    harvest, context = _spool(fair_dirs)
+def test_quality_ok_for_healthy_mission(fairy_dirs):
+    from ros_fairy.manifest import quality
+    harvest, context = _spool(fairy_dirs)
     record = builder.build(harvest, context)
     assert quality.assess(record, harvest).level == quality.OK
 
 
-def test_quality_poor_without_ros_context(fair_dirs):
-    from fair_ros.manifest import quality
-    harvest, context = _spool(fair_dirs)
+def test_quality_poor_without_ros_context(fairy_dirs):
+    from ros_fairy.manifest import quality
+    harvest, context = _spool(fairy_dirs)
     harvest["ros_graph"]["nodes"] = []
     harvest["provenance"]["harvest_status"]["ros_graph"] = "failed"
     record = builder.build(harvest, context)
@@ -671,27 +671,27 @@ def test_quality_poor_without_ros_context(fair_dirs):
     assert q.level == quality.POOR and any("software" in r for r in q.reasons)
 
 
-def test_quality_poor_when_all_bags_unusable(fair_dirs):
-    from fair_ros.manifest import quality
-    harvest, context = _spool(fair_dirs)
+def test_quality_poor_when_all_bags_unusable(fairy_dirs):
+    from ros_fairy.manifest import quality
+    harvest, context = _spool(fairy_dirs)
     record = builder.build(harvest, context)
     for b in record.bags:
         b.duration_s = None
     assert quality.assess(record, harvest).level == quality.POOR
 
 
-def test_quality_degraded_when_sensor_not_detected(fair_dirs):
-    from fair_ros.manifest import quality
-    harvest, context = _spool(fair_dirs)
+def test_quality_degraded_when_sensor_not_detected(fairy_dirs):
+    from ros_fairy.manifest import quality
+    harvest, context = _spool(fairy_dirs)
     record = builder.build(harvest, context)
     for s in record.sensors:
         s.detected_at_start = False
     assert quality.assess(record, harvest).level == quality.DEGRADED
 
 
-def test_mission_close_gates_poor_mission(fair_dirs):
+def test_mission_close_gates_poor_mission(fairy_dirs):
     # Spool harvest looks like no ROS context was captured -> poor.
-    harvest, _ = _spool(fair_dirs)
+    harvest, _ = _spool(fairy_dirs)
     harvest["ros_graph"]["nodes"] = []
     harvest["provenance"]["harvest_status"]["ros_graph"] = "failed"
     fsio.atomic_write_json(paths.harvest_json_path(), harvest)
@@ -707,16 +707,16 @@ def test_mission_close_gates_poor_mission(fair_dirs):
     assert captured["risky"] is True
 
 
-def test_mission_close_warns_on_likely_duplicate(fair_dirs):
-    from fair_ros.archive import assembler
+def test_mission_close_warns_on_likely_duplicate(fairy_dirs):
+    from ros_fairy.archive import assembler
 
     # 1) Save a "Crosslab" mission.
-    harvest, context = _spool(fair_dirs)
+    harvest, context = _spool(fairy_dirs)
     context["intent"]["location_name"] = "Crosslab"
     assembler.assemble(builder.build(harvest, context), harvest)
 
     # 2) Spool a new mission with the place mistyped "Crossloab".
-    harvest2, context2 = _spool(fair_dirs)
+    harvest2, context2 = _spool(fairy_dirs)
     context2["intent"]["location_name"] = "Crossloab"
     fsio.atomic_write_json(paths.mission_context_path(), context2)
 
@@ -727,8 +727,8 @@ def test_mission_close_warns_on_likely_duplicate(fair_dirs):
     assert "Possible duplicate" in console.file.getvalue()
 
 
-def test_mission_close_does_not_gate_healthy_mission(fair_dirs):
-    _spool(fair_dirs)
+def test_mission_close_does_not_gate_healthy_mission(fairy_dirs):
+    _spool(fairy_dirs)
     captured = {}
 
     def fake_confirm(console=None, *, risky=False):
@@ -742,16 +742,16 @@ def test_mission_close_does_not_gate_healthy_mission(fair_dirs):
 
 # --- export ------------------------------------------------------------------
 
-def _make_archive(fair_dirs):
-    from fair_ros.archive import assembler
-    harvest, context = _spool(fair_dirs)
+def _make_archive(fairy_dirs):
+    from ros_fairy.archive import assembler
+    harvest, context = _spool(fairy_dirs)
     record = builder.build(harvest, context)
     return assembler.assemble(record, harvest)
 
 
-def test_export_creates_zip_and_checksum(fair_dirs, tmp_path):
+def test_export_creates_zip_and_checksum(fairy_dirs, tmp_path):
     import zipfile
-    crate = _make_archive(fair_dirs)
+    crate = _make_archive(fairy_dirs)
     out = tmp_path / "share"
     out.mkdir()  # an existing directory is treated as the output folder
     args = SimpleNamespace(mission=str(crate), output=str(out), format="zip",
@@ -770,8 +770,8 @@ def test_export_creates_zip_and_checksum(fair_dirs, tmp_path):
     assert f"{crate.name}/mission_record.json" in names
 
 
-def test_export_refuses_existing_without_force(fair_dirs, tmp_path):
-    crate = _make_archive(fair_dirs)
+def test_export_refuses_existing_without_force(fairy_dirs, tmp_path):
+    crate = _make_archive(fairy_dirs)
     dest = tmp_path / "m.zip"
     dest.write_text("old")
     base = dict(mission=str(crate), output=str(dest), format="zip", json=False)
@@ -782,8 +782,8 @@ def test_export_refuses_existing_without_force(fair_dirs, tmp_path):
     assert dest.read_bytes()[:2] == b"PK"  # overwritten with a real zip
 
 
-def test_export_json(fair_dirs, tmp_path, capsys):
-    crate = _make_archive(fair_dirs)
+def test_export_json(fairy_dirs, tmp_path, capsys):
+    crate = _make_archive(fairy_dirs)
     args = SimpleNamespace(mission=str(crate), output=str(tmp_path),
                            format="zip", force=False, json=True)
     assert export.run(args) == 0
@@ -792,7 +792,7 @@ def test_export_json(fair_dirs, tmp_path, capsys):
     assert data["mission_id"] and data["verify_result"] in ("ok", "warn", "fail")
 
 
-def test_export_unknown_mission(fair_dirs):
+def test_export_unknown_mission(fairy_dirs):
     args = SimpleNamespace(mission="does-not-exist", output=None, format="zip",
                            force=False, json=False)
     assert export.run(args, console=_console()) == 1
@@ -815,7 +815,7 @@ def test_doctor_watchdog_stale_heartbeat_only_matters_while_recording():
     import os
     from datetime import datetime, timedelta, timezone
 
-    from fair_ros.watchdog import watchdog as wd
+    from ros_fairy.watchdog import watchdog as wd
     old = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
     idle = {"pid": os.getpid(), "state": "IDLE", "heartbeat_at": old}
     with mock.patch.object(wd, "read_state", return_value=idle):
@@ -827,7 +827,7 @@ def test_doctor_watchdog_stale_heartbeat_only_matters_while_recording():
 
 
 def test_doctor_service_harvest_distinguishes_service_context():
-    from fair_ros.watchdog import watchdog as wd
+    from ros_fairy.watchdog import watchdog as wd
     with mock.patch.object(wd, "read_state",
                            return_value={"harvest_status": {"ros_graph": "ok"}}):
         assert doctor._check_service_harvest()["status"] == doctor.OK
@@ -840,20 +840,20 @@ def test_doctor_service_harvest_distinguishes_service_context():
         assert doctor._check_service_harvest()["status"] == doctor.SKIP
 
 
-def test_doctor_service_env_missing_file_fails(fair_dirs):
+def test_doctor_service_env_missing_file_fails(fairy_dirs):
     # watchdog.env doesn't exist → the service started blind.
     c = doctor._check_service_env()
     assert c["status"] == doctor.FAIL and "ros2 fairy setup" in c["hint"]
 
 
-def test_doctor_service_env_no_distro_fails(fair_dirs):
-    from fair_ros.utils import ros_env
+def test_doctor_service_env_no_distro_fails(fairy_dirs):
+    from ros_fairy.utils import ros_env
     ros_env.write_file(paths.watchdog_env_path(), {"PATH": "/usr/bin"})
     assert doctor._check_service_env()["status"] == doctor.FAIL
 
 
-def test_doctor_service_env_domain_mismatch_warns(fair_dirs):
-    from fair_ros.utils import ros_env
+def test_doctor_service_env_domain_mismatch_warns(fairy_dirs):
+    from ros_fairy.utils import ros_env
     ros_env.write_file(paths.watchdog_env_path(),
                        {"ROS_DISTRO": "jazzy", "ROS_DOMAIN_ID": "7"})
     with mock.patch.dict(doctor.os.environ, {"ROS_DOMAIN_ID": "42"}):
@@ -861,8 +861,8 @@ def test_doctor_service_env_domain_mismatch_warns(fair_dirs):
     assert c["status"] == doctor.WARN and "ROS_DOMAIN_ID" in c["detail"]
 
 
-def test_doctor_service_env_matches_is_ok(fair_dirs):
-    from fair_ros.utils import ros_env
+def test_doctor_service_env_matches_is_ok(fairy_dirs):
+    from ros_fairy.utils import ros_env
     ros_env.write_file(paths.watchdog_env_path(),
                        {"ROS_DISTRO": "jazzy", "ROS_DOMAIN_ID": "7",
                         "RMW_IMPLEMENTATION": "rmw_cyclonedds_cpp"})
@@ -899,10 +899,10 @@ def test_doctor_run_ready():
     assert "READY" in console.file.getvalue()
 
 
-def test_setup_captures_ros_environment(fair_dirs):
+def test_setup_captures_ros_environment(fairy_dirs):
     """The watchdog runs as a service with no sourced ROS env, so setup must
     snapshot the operator's ROS environment into the unit's EnvironmentFile."""
-    keep = {"FAIR_ROS_CONFIG_DIR": os.environ["FAIR_ROS_CONFIG_DIR"]}
+    keep = {"ROS_FAIRY_CONFIG_DIR": os.environ["ROS_FAIRY_CONFIG_DIR"]}
     env = {**keep,
            "ROS_DISTRO": "jazzy",
            "AMENT_PREFIX_PATH": "/opt/ros/jazzy",
@@ -923,22 +923,22 @@ def test_setup_captures_ros_environment(fair_dirs):
     assert "HOME=" not in text
 
 
-def test_setup_fails_when_ros_environment_missing(fair_dirs):
+def test_setup_fails_when_ros_environment_missing(fairy_dirs):
     """No captured ROS env must abort setup (not just warn): the service would
     otherwise start blind and harvest an empty graph forever (issue #29)."""
-    keep = {"FAIR_ROS_CONFIG_DIR": os.environ["FAIR_ROS_CONFIG_DIR"]}
+    keep = {"ROS_FAIRY_CONFIG_DIR": os.environ["ROS_FAIRY_CONFIG_DIR"]}
     console = _console()
     with mock.patch.dict(setup_cmd.os.environ, {**keep, "PATH": "/usr/bin"},
                          clear=True):
         assert setup_cmd._check_ros_visible(console) is False
     out = console.file.getvalue()
-    assert "ROS_DISTRO is unset" in out and "fair-ros-setup" in out
+    assert "ROS_DISTRO is unset" in out and "ros-fairy-setup" in out
 
 
-def test_setup_fails_when_graph_not_visible(fair_dirs):
+def test_setup_fails_when_graph_not_visible(fairy_dirs):
     """ROS sourced but no nodes visible (wrong domain/RMW, software down) must
     abort: the watchdog would harvest an empty graph."""
-    keep = {"FAIR_ROS_CONFIG_DIR": os.environ["FAIR_ROS_CONFIG_DIR"]}
+    keep = {"ROS_FAIRY_CONFIG_DIR": os.environ["ROS_FAIRY_CONFIG_DIR"]}
     console = _console()
     with mock.patch.dict(setup_cmd.os.environ,
                          {**keep, "ROS_DISTRO": "jazzy", "PATH": "/usr/bin"},
@@ -948,8 +948,8 @@ def test_setup_fails_when_graph_not_visible(fair_dirs):
     assert "no nodes are visible" in console.file.getvalue()
 
 
-def test_setup_ros_visible_passes(fair_dirs):
-    keep = {"FAIR_ROS_CONFIG_DIR": os.environ["FAIR_ROS_CONFIG_DIR"]}
+def test_setup_ros_visible_passes(fairy_dirs):
+    keep = {"ROS_FAIRY_CONFIG_DIR": os.environ["ROS_FAIRY_CONFIG_DIR"]}
     with mock.patch.dict(setup_cmd.os.environ,
                          {**keep, "ROS_DISTRO": "jazzy", "PATH": "/usr/bin"},
                          clear=True), \
@@ -958,7 +958,7 @@ def test_setup_ros_visible_passes(fair_dirs):
         assert setup_cmd._check_ros_visible(_console()) is True
 
 
-def test_setup_written_identity_is_harvestable(fair_dirs):
+def test_setup_written_identity_is_harvestable(fairy_dirs):
     config = {
         "robot": {"name": "Heron-02", "platform": "Heron",
                   "serial_number": "H02"},
@@ -967,7 +967,7 @@ def test_setup_written_identity_is_harvestable(fair_dirs):
                      "make_model": "F9P", "topic": "/fix"}],
     }
     setup_cmd.write_identity(config)
-    from fair_ros.harvest import robot_identity
+    from ros_fairy.harvest import robot_identity
     data = robot_identity.harvest()
     assert data["robot"]["name"] == "Heron-02"
     assert data["sensors"][0]["sensor_id"] == "gps0"
@@ -976,7 +976,7 @@ def test_setup_written_identity_is_harvestable(fair_dirs):
 # --- verb boundary guard (no tracebacks, Ctrl-C -> 130) ----------------------
 
 def test_guarded_main_turns_ctrl_c_into_130(capsys):
-    from fair_ros.subcommands import guarded_main
+    from ros_fairy.subcommands import guarded_main
 
     def run(args):
         raise KeyboardInterrupt
@@ -988,7 +988,7 @@ def test_guarded_main_turns_ctrl_c_into_130(capsys):
 
 
 def test_guarded_main_hides_unexpected_errors(capsys):
-    from fair_ros.subcommands import guarded_main
+    from ros_fairy.subcommands import guarded_main
 
     def run(args):
         raise RuntimeError("internal detail the operator must not see")
@@ -1001,7 +1001,7 @@ def test_guarded_main_hides_unexpected_errors(capsys):
 
 
 def test_guarded_main_reraises_for_engineers():
-    from fair_ros.subcommands import guarded_main
+    from ros_fairy.subcommands import guarded_main
 
     def run(args):
         raise RuntimeError("boom")
@@ -1011,7 +1011,7 @@ def test_guarded_main_reraises_for_engineers():
 
 
 def test_guarded_main_passes_through_exit_codes():
-    from fair_ros.subcommands import guarded_main
+    from ros_fairy.subcommands import guarded_main
     assert guarded_main(lambda args: 0, SimpleNamespace()) == 0
     assert guarded_main(lambda args: 3, SimpleNamespace()) == 3
 
@@ -1020,8 +1020,8 @@ def test_all_verb_wrappers_are_guarded():
     """Every VerbExtension.main must route through guarded_main."""
     import inspect
 
-    from fair_ros import subcommands as pkg
-    from fair_ros.subcommands import adopt, reindex, verify
+    from ros_fairy import subcommands as pkg
+    from ros_fairy.subcommands import adopt, reindex, verify
     modules = [adopt, doctor, export, list_missions, mission_close,
                mission_diff, mission_record, mission_start, mission_status,
                reindex, repair, setup_cmd, verify]
@@ -1039,11 +1039,11 @@ def test_all_verb_wrappers_are_guarded():
 
 # --- reindex ------------------------------------------------------------------
 
-def test_reindex_verb_rebuilds_index(fair_dirs, capsys):
-    from fair_ros.archive import assembler, index
-    from fair_ros.subcommands import reindex
+def test_reindex_verb_rebuilds_index(fairy_dirs, capsys):
+    from ros_fairy.archive import assembler, index
+    from ros_fairy.subcommands import reindex
 
-    harvest, context = _spool(fair_dirs)
+    harvest, context = _spool(fairy_dirs)
     record = builder.build(harvest, context)
     final = assembler.assemble(record, harvest)
     paths.index_db_path().unlink()
@@ -1055,8 +1055,8 @@ def test_reindex_verb_rebuilds_index(fair_dirs, capsys):
     assert rows[0]["archive_path"] == str(final)
 
 
-def test_reindex_verb_json_and_empty_archive(fair_dirs, capsys):
-    from fair_ros.subcommands import reindex
+def test_reindex_verb_json_and_empty_archive(fairy_dirs, capsys):
+    from ros_fairy.subcommands import reindex
 
     args = SimpleNamespace(json=True, debug=False)
     assert reindex.run(args, console=_console()) == 0

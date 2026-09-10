@@ -25,13 +25,13 @@ from contextlib import contextmanager
 
 import pytest
 
-from fair_ros.archive import assembler
-from fair_ros.harvest import ros_descriptions, ros_graph
-from fair_ros.manifest import builder
-from fair_ros.subcommands import verify
-from fair_ros.utils import fsio, paths
-from fair_ros.watchdog import recorder_scan, watchdog
-from fair_ros.watchdog.watchdog import IDLE, RECORDING, Watchdog
+from ros_fairy.archive import assembler
+from ros_fairy.harvest import ros_descriptions, ros_graph
+from ros_fairy.manifest import builder
+from ros_fairy.subcommands import verify
+from ros_fairy.utils import fsio, paths
+from ros_fairy.watchdog import recorder_scan, watchdog
+from ros_fairy.watchdog.watchdog import IDLE, RECORDING, Watchdog
 
 pytestmark = pytest.mark.ros
 
@@ -119,7 +119,7 @@ def test_ros_descriptions_captures_latched_urdf():
 
     rclpy.init()
     try:
-        node = rclpy.create_node("fair_ros_smoke_urdf_pub")
+        node = rclpy.create_node("ros_fairy_smoke_urdf_pub")
         pub = node.create_publisher(String, "/robot_description", latched)
         pub.publish(String(data=urdf))
         # let the latched sample go out on the wire
@@ -157,10 +157,10 @@ sensors:
 """
 
 
-def test_full_record_harvest_archive_verify(talker, fair_dirs):
+def test_full_record_harvest_archive_verify(talker, fairy_dirs):
     """End-to-end on real ROS: record a bag, run the real harvest pipeline,
     assemble the crate, and verify it."""
-    (fair_dirs["cfg"] / "robot_identity.yaml").write_text(_IDENTITY_YAML)
+    (fairy_dirs["cfg"] / "robot_identity.yaml").write_text(_IDENTITY_YAML)
 
     bag_dir = paths.bags_dir() / "smoke_bag"
     with _background(["ros2", "bag", "record", "-o", str(bag_dir), "/chatter"]):
@@ -214,10 +214,10 @@ def test_recorder_scan_finds_live_recording(talker, tmp_path):
 
 
 def test_watchdog_poller_detects_and_finalises_foreign(talker, tmp_path,
-                                                       fair_dirs):
+                                                       fairy_dirs):
     """End-to-end live: the watchdog's poller adopts a recording started outside
     mission_record, harvests it, and finalises it as a `detected` bag in place."""
-    (fair_dirs["cfg"] / "robot_identity.yaml").write_text(_IDENTITY_YAML)
+    (fairy_dirs["cfg"] / "robot_identity.yaml").write_text(_IDENTITY_YAML)
     bag_dir = (tmp_path / "ext_live").resolve()
 
     dog = Watchdog(harvest_in_thread=False)  # real inotify, /proc scan, clock

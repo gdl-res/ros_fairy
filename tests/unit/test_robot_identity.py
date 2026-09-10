@@ -1,7 +1,7 @@
 import pytest
 
-from fair_ros.harvest import robot_identity
-from fair_ros.harvest.robot_identity import RobotIdentityError
+from ros_fairy.harvest import robot_identity
+from ros_fairy.harvest.robot_identity import RobotIdentityError
 
 
 def test_valid_identity(identity_yaml):
@@ -17,20 +17,20 @@ def test_valid_identity(identity_yaml):
     assert data["default_license"] is None
 
 
-def test_missing_file(fair_dirs):
+def test_missing_file(fairy_dirs):
     with pytest.raises(RobotIdentityError, match="not found"):
         robot_identity.harvest()
 
 
-def test_missing_required_field(fair_dirs):
-    (fair_dirs["cfg"] / "robot_identity.yaml").write_text(
+def test_missing_required_field(fairy_dirs):
+    (fairy_dirs["cfg"] / "robot_identity.yaml").write_text(
         "robot:\n  name: x\n  platform: y\nowner:\n  organization: z\n"
         "  contact_email: a@b.c\n")
     with pytest.raises(RobotIdentityError, match="serial_number"):
         robot_identity.harvest()
 
 
-def test_duplicate_sensor_id(fair_dirs, identity_yaml):
+def test_duplicate_sensor_id(fairy_dirs, identity_yaml):
     text = identity_yaml.read_text().replace("sensor_id: sonar0",
                                              "sensor_id: gps0")
     identity_yaml.write_text(text)
@@ -38,7 +38,7 @@ def test_duplicate_sensor_id(fair_dirs, identity_yaml):
         robot_identity.harvest()
 
 
-def test_unknown_calibration_ref(fair_dirs, identity_yaml):
+def test_unknown_calibration_ref(fairy_dirs, identity_yaml):
     text = identity_yaml.read_text().replace("calibration: gps0_cal",
                                              "calibration: nope")
     identity_yaml.write_text(text)
@@ -46,7 +46,7 @@ def test_unknown_calibration_ref(fair_dirs, identity_yaml):
         robot_identity.harvest()
 
 
-def test_invalid_yaml(fair_dirs):
-    (fair_dirs["cfg"] / "robot_identity.yaml").write_text("{[broken")
+def test_invalid_yaml(fairy_dirs):
+    (fairy_dirs["cfg"] / "robot_identity.yaml").write_text("{[broken")
     with pytest.raises(RobotIdentityError, match="YAML"):
         robot_identity.harvest()

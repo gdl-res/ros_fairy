@@ -3,10 +3,10 @@ import json
 import pytest
 from inotify_simple import Event, flags
 
-from fair_ros.manifest import builder
-from fair_ros.utils import paths
-from fair_ros.watchdog import watchdog as wd_mod
-from fair_ros.watchdog.watchdog import IDLE, RECORDING, Watchdog
+from ros_fairy.manifest import builder
+from ros_fairy.utils import paths
+from ros_fairy.watchdog import watchdog as wd_mod
+from ros_fairy.watchdog.watchdog import IDLE, RECORDING, Watchdog
 from tests.conftest import make_bag
 
 T0 = 1_750_000_000.0
@@ -79,7 +79,7 @@ def good_pipeline():
 
 
 @pytest.fixture
-def rig(fair_dirs):
+def rig(fairy_dirs):
     ino = FakeINotify()
     clock = FakeClock()
     dog = Watchdog(inotify=ino, clock=clock, pipeline=good_pipeline,
@@ -189,7 +189,7 @@ def test_activity_defers_inactivity_timeout(rig):
     assert dog.state == RECORDING
 
 
-def test_ros_down_schedules_retry_and_recovers(fair_dirs):
+def test_ros_down_schedules_retry_and_recovers(fairy_dirs):
     ino, clock = FakeINotify(), FakeClock()
     calls = {"n": 0}
 
@@ -223,7 +223,7 @@ def test_ros_down_schedules_retry_and_recovers(fair_dirs):
     assert dog._next_retry is None
 
 
-def test_recovery_finalises_leftover_bag(fair_dirs):
+def test_recovery_finalises_leftover_bag(fairy_dirs):
     bag = make_bag(paths.bags_dir() / "rosbag2_left",
                    {"/fix": _steady(T0, T0 + 60, 10)})
     ino, clock = FakeINotify(), FakeClock()
@@ -236,7 +236,7 @@ def test_recovery_finalises_leftover_bag(fair_dirs):
     assert harvest["bags"][0]["path"] == str(bag)
 
 
-def test_unreliable_clock_bag_records_unknown_duration(fair_dirs):
+def test_unreliable_clock_bag_records_unknown_duration(fairy_dirs):
     """A bag whose clock was broken for most of the run is finalised with an
     unknown duration and no fabricated start/end times or data rates."""
     bad = [float(i) for i in range(1, 31)]      # 30 near-epoch stamps
@@ -253,11 +253,11 @@ def test_unreliable_clock_bag_records_unknown_duration(fair_dirs):
     assert all(t["avg_frequency_hz"] is None for t in rec["topics"])
     assert any(w["kind"] == "unreliable_clock" for w in rec["health_warnings"])
     # the record still validates against the schema (timing fields optional).
-    from fair_ros.manifest.schema import Bag
+    from ros_fairy.manifest.schema import Bag
     Bag.model_validate(rec)
 
 
-def test_recovery_resumes_recording(fair_dirs):
+def test_recovery_resumes_recording(fairy_dirs):
     bag = make_bag(paths.bags_dir() / "rosbag2_live",
                    {"/fix": _steady(T0, T0 + 60, 10)})
     (bag / "metadata.yaml").unlink()
@@ -292,7 +292,7 @@ def test_second_bag_queued_then_recorded(rig):
     assert [b["path"] for b in harvest["bags"]] == [str(bag_a), str(bag_b)]
 
 
-def test_short_recording_waits_for_inflight_harvest(fair_dirs):
+def test_short_recording_waits_for_inflight_harvest(fairy_dirs):
     """A recording shorter than the harvest pipeline must not finalise
     against an empty spool (2026-07-03 field bug: a 6.7 s bag was archived
     with the all-modules-failed stub while the real harvest was still
@@ -342,12 +342,12 @@ def test_harvest_rewrite_preserves_bags(rig):
     assert len(harvest["bags"]) == 1
 
 
-def test_apply_session_env_adopts_recording_shell(fair_dirs):
+def test_apply_session_env_adopts_recording_shell(fairy_dirs):
     """The watchdog adopts the recorder's ROS env so its harvest lands on the
     same DDS partition as the session actually recording (issue #29)."""
     from unittest import mock
 
-    from fair_ros.utils import ros_env
+    from ros_fairy.utils import ros_env
     paths.spool_dir().mkdir(parents=True, exist_ok=True)
     ros_env.write_file(paths.session_env_path(),
                        {"ROS_DOMAIN_ID": "42", "RMW_IMPLEMENTATION": "rmw_x"})
@@ -359,12 +359,12 @@ def test_apply_session_env_adopts_recording_shell(fair_dirs):
         assert wd_mod.os.environ["RMW_IMPLEMENTATION"] == "rmw_x"
 
 
-def test_apply_session_env_ignores_loader_paths(fair_dirs):
+def test_apply_session_env_ignores_loader_paths(fairy_dirs):
     """A group-writable session.env must not inject loader paths into the
     root watchdog process (privilege escalation)."""
     from unittest import mock
 
-    from fair_ros.utils import ros_env
+    from ros_fairy.utils import ros_env
     paths.spool_dir().mkdir(parents=True, exist_ok=True)
     ros_env.write_file(paths.session_env_path(),
                        {"ROS_DOMAIN_ID": "42", "PYTHONPATH": "/tmp/evil",
@@ -380,12 +380,12 @@ def test_apply_session_env_ignores_loader_paths(fair_dirs):
         assert wd_mod.os.environ["PYTHONPATH"] == "/safe"
 
 
-def test_apply_session_env_reverts_keys_absent_from_session(fair_dirs):
+def test_apply_session_env_reverts_keys_absent_from_session(fairy_dirs):
     """A key a session doesn't set reverts to the watchdog's baseline, so a
     previous session's value never leaks into a later harvest (#29 review #3)."""
     from unittest import mock
 
-    from fair_ros.utils import ros_env
+    from ros_fairy.utils import ros_env
     paths.spool_dir().mkdir(parents=True, exist_ok=True)
     ros_env.write_file(paths.session_env_path(), {"ROS_DOMAIN_ID": "42"})
     with mock.patch.dict(wd_mod.os.environ,
@@ -398,13 +398,13 @@ def test_apply_session_env_reverts_keys_absent_from_session(fair_dirs):
         assert wd_mod.os.environ["RMW_IMPLEMENTATION"] == "rmw_base"
 
 
-def test_apply_session_env_noop_without_file(fair_dirs):
+def test_apply_session_env_noop_without_file(fairy_dirs):
     dog = Watchdog(inotify=FakeINotify(), pipeline=good_pipeline,
                    harvest_in_thread=False)
     dog._apply_session_env()  # must not raise when no session.env exists
 
 
-def test_read_state(fair_dirs):
+def test_read_state(fairy_dirs):
     assert wd_mod.read_state() is None
     paths.watchdog_state_path().write_text('{"state": "IDLE"}')
     assert wd_mod.read_state() == {"state": "IDLE"}
@@ -412,7 +412,7 @@ def test_read_state(fair_dirs):
     assert wd_mod.read_state() is None
 
 
-def test_ensure_ros_log_dir_when_home_missing(fair_dirs, monkeypatch):
+def test_ensure_ros_log_dir_when_home_missing(fairy_dirs, monkeypatch):
     # Under systemd there is no $HOME; rcl logging then fails to expand
     # ~/.ros/log and node creation breaks (param dump, rclpy descriptions).
     monkeypatch.delenv("HOME", raising=False)
@@ -422,7 +422,7 @@ def test_ensure_ros_log_dir_when_home_missing(fair_dirs, monkeypatch):
     assert paths.ros_log_dir().is_dir()
 
 
-def test_ensure_ros_log_dir_respects_existing_env(fair_dirs, monkeypatch):
+def test_ensure_ros_log_dir_respects_existing_env(fairy_dirs, monkeypatch):
     monkeypatch.setenv("HOME", "/home/someone")
     monkeypatch.delenv("ROS_LOG_DIR", raising=False)
     wd_mod.ensure_ros_log_dir()

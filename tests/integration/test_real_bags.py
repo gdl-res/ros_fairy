@@ -16,10 +16,10 @@ from pathlib import Path
 
 import pytest
 
-from fair_ros.archive import assembler
-from fair_ros.manifest import builder
-from fair_ros.utils import bag_storage, fsio, paths, topic_health
-from fair_ros.watchdog import watchdog
+from ros_fairy.archive import assembler
+from ros_fairy.manifest import builder
+from ros_fairy.utils import bag_storage, fsio, paths, topic_health
+from ros_fairy.watchdog import watchdog
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 
@@ -78,7 +78,7 @@ def test_storage_reader_reads_real_timestamps(bag):
 
 
 @pytest.mark.parametrize("bag", _BAGS, ids=_bag_id)
-def test_assemble_crate_from_real_bag(bag, fair_dirs):
+def test_assemble_crate_from_real_bag(bag, fairy_dirs):
     """Full path: real metadata -> Bag record -> MissionRecord -> RO-Crate."""
     rocrate = pytest.importorskip("rocrate.rocrate")
 

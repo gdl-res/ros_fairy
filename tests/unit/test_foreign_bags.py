@@ -9,13 +9,13 @@ from unittest import mock
 
 from inotify_simple import flags
 
-from fair_ros.archive import assembler
-from fair_ros.manifest import builder
-from fair_ros.subcommands import adopt
-from fair_ros.utils import fsio, paths
-from fair_ros.watchdog import recorder_scan
-from fair_ros.watchdog import watchdog as wd_mod
-from fair_ros.watchdog.watchdog import IDLE, RECORDING, Watchdog
+from ros_fairy.archive import assembler
+from ros_fairy.manifest import builder
+from ros_fairy.subcommands import adopt
+from ros_fairy.utils import fsio, paths
+from ros_fairy.watchdog import recorder_scan
+from ros_fairy.watchdog import watchdog as wd_mod
+from ros_fairy.watchdog.watchdog import IDLE, RECORDING, Watchdog
 from tests.conftest import make_bag
 from tests.unit.test_watchdog import (
     T0,
@@ -211,7 +211,7 @@ def _foreign_dog(found):
     return ino, clock, dog
 
 
-def test_foreign_recording_detected_and_finalised(fair_dirs, tmp_path):
+def test_foreign_recording_detected_and_finalised(fairy_dirs, tmp_path):
     foreign = make_bag(tmp_path / "ext_run", {"/fix": _steady(T0, T0 + 60, 10)})
     found = [{"pid": os.getpid(), "output_dir": foreign, "discovery": {}}]
     ino, clock, dog = _foreign_dog(found)
@@ -231,7 +231,7 @@ def test_foreign_recording_detected_and_finalised(fair_dirs, tmp_path):
     assert foreign.is_dir()  # referenced in place, not moved
 
 
-def test_foreign_recorder_exit_finalises(fair_dirs, tmp_path):
+def test_foreign_recorder_exit_finalises(fairy_dirs, tmp_path):
     foreign = make_bag(tmp_path / "ext2", {"/fix": _steady(T0, T0 + 60, 10)})
     dead_pid = 0x7FFFFFFF  # no such process
     found = [{"pid": dead_pid, "output_dir": foreign, "discovery": {}}]
@@ -244,7 +244,7 @@ def test_foreign_recorder_exit_finalises(fair_dirs, tmp_path):
     assert harvest["bags"][0]["source"] == "detected"
 
 
-def test_foreign_harvest_adopts_recorder_environ(fair_dirs, tmp_path):
+def test_foreign_harvest_adopts_recorder_environ(fairy_dirs, tmp_path):
     foreign = make_bag(tmp_path / "ext3", {"/fix": _steady(T0, T0 + 5, 10)})
     found = [{"pid": os.getpid(), "output_dir": foreign,
               "discovery": {"ROS_DOMAIN_ID": "42"}}]
@@ -257,7 +257,7 @@ def test_foreign_harvest_adopts_recorder_environ(fair_dirs, tmp_path):
         assert wd_mod.os.environ["ROS_DOMAIN_ID"] == "42"
 
 
-def test_quiet_foreign_bag_waits_for_recorder_exit(fair_dirs, tmp_path):
+def test_quiet_foreign_bag_waits_for_recorder_exit(fairy_dirs, tmp_path):
     # No bag-file activity for BAG_INACTIVITY_S, but the recorder still runs
     # (quiet topics, buffered writes): must NOT finalise until it exits.
     foreign = make_bag(tmp_path / "ext5", {"/fix": _steady(T0, T0 + 60, 10)})
@@ -286,7 +286,7 @@ def test_quiet_foreign_bag_waits_for_recorder_exit(fair_dirs, tmp_path):
     assert harvest["bags"][0]["storage_format"] != "unknown"
 
 
-def test_foreign_recording_queued_while_busy(fair_dirs, tmp_path):
+def test_foreign_recording_queued_while_busy(fairy_dirs, tmp_path):
     foreign = make_bag(tmp_path / "ext4", {"/fix": _steady(T0, T0 + 60, 10)})
     found = [{"pid": os.getpid(), "output_dir": foreign, "discovery": {}}]
     ino, clock, dog = _foreign_dog(found)
@@ -306,7 +306,7 @@ def test_foreign_recording_queued_while_busy(fair_dirs, tmp_path):
     assert foreign in dog.queued_bags        # one bag, one mission
 
 
-def test_poller_ignores_spool_bags(fair_dirs):
+def test_poller_ignores_spool_bags(fairy_dirs):
     dog = Watchdog(inotify=FakeINotify(), pipeline=good_pipeline,
                    harvest_in_thread=False, scan_recorders=lambda: [])
     spool_bag = (paths.bags_dir() / "rosbag2_x").resolve()
@@ -324,7 +324,7 @@ def _args(bagdir, json=False):
     return SimpleNamespace(bagdir=str(bagdir), json=json, debug=False)
 
 
-def test_adopt_appends_bag(fair_dirs, tmp_path):
+def test_adopt_appends_bag(fairy_dirs, tmp_path):
     _seed_harvest()
     bag = make_bag(tmp_path / "adopt_me", {"/fix": _steady(T0, T0 + 30, 10)})
     assert adopt.run(_args(bag)) == 0
@@ -333,21 +333,21 @@ def test_adopt_appends_bag(fair_dirs, tmp_path):
     assert harvest["bags"][-1]["path"] == str(bag.resolve())
 
 
-def test_adopt_rejects_non_bag(fair_dirs, tmp_path):
+def test_adopt_rejects_non_bag(fairy_dirs, tmp_path):
     assert adopt.run(_args(tmp_path / "nope")) == 1
     empty = tmp_path / "empty"
     empty.mkdir()
     assert adopt.run(_args(empty)) == 1  # a dir, but not a recording
 
 
-def test_adopt_refuses_while_recording(fair_dirs, tmp_path):
+def test_adopt_refuses_while_recording(fairy_dirs, tmp_path):
     fsio.atomic_write_json(paths.watchdog_state_path(),
                            {"version": 1, "state": "RECORDING"})
     bag = make_bag(tmp_path / "busy", {"/fix": [T0, T0 + 1]})
     assert adopt.run(_args(bag)) == 1
 
 
-def test_adopt_is_idempotent(fair_dirs, tmp_path):
+def test_adopt_is_idempotent(fairy_dirs, tmp_path):
     _seed_harvest()
     bag = make_bag(tmp_path / "twice", {"/fix": [T0, T0 + 1]})
     assert adopt.run(_args(bag)) == 0
@@ -357,7 +357,7 @@ def test_adopt_is_idempotent(fair_dirs, tmp_path):
                if b["path"] == str(bag.resolve())) == 1
 
 
-def test_adopt_harvests_when_no_context(fair_dirs, tmp_path, monkeypatch):
+def test_adopt_harvests_when_no_context(fairy_dirs, tmp_path, monkeypatch):
     monkeypatch.setattr(adopt.watchdog, "run_pipeline", good_pipeline)
     bag = make_bag(tmp_path / "cold", {"/fix": [T0, T0 + 1]})
     assert adopt.run(_args(bag)) == 0
@@ -388,7 +388,7 @@ def _record_with_bag(bag_path, source):
                              _bag_entry(bag_path, source))
 
 
-def test_foreign_bag_copied_not_moved(fair_dirs, tmp_path):
+def test_foreign_bag_copied_not_moved(fairy_dirs, tmp_path):
     bag = make_bag(tmp_path / "ext", {"/fix": [T0, T0 + 1]})
     record, harvest = _record_with_bag(bag, "detected")
     crate = assembler.assemble(record, harvest)
@@ -396,7 +396,7 @@ def test_foreign_bag_copied_not_moved(fair_dirs, tmp_path):
     assert bag.is_dir()  # original left in place
 
 
-def test_vanished_foreign_bag_skipped(fair_dirs, tmp_path):
+def test_vanished_foreign_bag_skipped(fairy_dirs, tmp_path):
     bag = make_bag(tmp_path / "gone", {"/fix": [T0, T0 + 1]})
     record, harvest = _record_with_bag(bag, "detected")
     shutil.rmtree(bag)  # operator moved/deleted it before saving
@@ -405,7 +405,7 @@ def test_vanished_foreign_bag_skipped(fair_dirs, tmp_path):
     assert record.bags == []
 
 
-def test_spool_bag_still_moved(fair_dirs):
+def test_spool_bag_still_moved(fairy_dirs):
     bag = make_bag(paths.bags_dir() / "rosbag2_m", {"/fix": [T0, T0 + 1]})
     record, harvest = _record_with_bag(bag, "mission_record")
     crate = assembler.assemble(record, harvest)
@@ -414,7 +414,7 @@ def test_spool_bag_still_moved(fair_dirs):
 
 
 def test_foreign_bag_vanishing_mid_assembly_is_not_fatal(
-        fair_dirs, tmp_path, monkeypatch):
+        fairy_dirs, tmp_path, monkeypatch):
     """A foreign bag deleted *during* assembly is dropped, not fatal (#35)."""
     foreign = make_bag(tmp_path / "ext", {"/fix": [T0, T0 + 1]})
     spool = make_bag(paths.bags_dir() / "rosbag2_keep", {"/fix": [T0, T0 + 1]})
@@ -445,13 +445,13 @@ def _harvest_with_foreign(path):
     return harvest
 
 
-def test_warns_on_vanished_foreign(fair_dirs):
+def test_warns_on_vanished_foreign(fairy_dirs):
     warns = builder.harvest_level_warnings(
         _harvest_with_foreign("/no/such/run"))
     assert any("can no longer be found" in w for w in warns)
 
 
-def test_no_warning_for_present_foreign(fair_dirs, tmp_path):
+def test_no_warning_for_present_foreign(fairy_dirs, tmp_path):
     bag = make_bag(tmp_path / "here", {"/fix": [T0]})
     warns = builder.harvest_level_warnings(_harvest_with_foreign(bag))
     assert not any("can no longer be found" in w for w in warns)

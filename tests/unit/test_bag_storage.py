@@ -2,7 +2,7 @@ import importlib.util
 
 import pytest
 
-from fair_ros.utils import bag_storage
+from ros_fairy.utils import bag_storage
 from tests.conftest import make_bag, make_mcap_bag
 
 T0 = 1_750_000_000.0

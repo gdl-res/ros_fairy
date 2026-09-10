@@ -4,17 +4,17 @@ from types import SimpleNamespace
 
 from rich.console import Console
 
-from fair_ros.archive import assembler, index
-from fair_ros.manifest import builder
-from fair_ros.subcommands import verify
-from fair_ros.utils import fsio, paths
+from ros_fairy.archive import assembler, index
+from ros_fairy.manifest import builder
+from ros_fairy.subcommands import verify
+from ros_fairy.utils import fsio, paths
 from tests.unit.test_archive import _spool
 
 FAIL, WARN, OK = verify.FAIL, verify.WARN, verify.OK
 
 
-def _make_crate(fair_dirs):
-    harvest, context = _spool(fair_dirs)
+def _make_crate(fairy_dirs):
+    harvest, context = _spool(fairy_dirs)
     record = builder.build(harvest, context)
     return assembler.assemble(record, harvest)
 
@@ -27,8 +27,8 @@ def _console():
     return Console(file=io.StringIO(), width=100, force_terminal=False)
 
 
-def test_clean_archive_has_no_failures(fair_dirs):
-    crate = _make_crate(fair_dirs)
+def test_clean_archive_has_no_failures(fairy_dirs):
+    crate = _make_crate(fairy_dirs)
     checks = verify.verify_archive(crate)
     assert FAIL not in _statuses(checks)
     assert verify._overall(checks) != FAIL
@@ -40,16 +40,16 @@ def test_clean_archive_has_no_failures(fair_dirs):
     assert "registered in the index" in titles
 
 
-def test_run_returns_zero_for_clean_archive(fair_dirs):
-    _make_crate(fair_dirs)
+def test_run_returns_zero_for_clean_archive(fairy_dirs):
+    _make_crate(fairy_dirs)
     console = _console()
     args = SimpleNamespace(mission="1", json=False, debug=False)
     assert verify.run(args, console=console) == 0
     assert "PASS" in console.file.getvalue()
 
 
-def test_detects_modified_calibration(fair_dirs):
-    crate = _make_crate(fair_dirs)
+def test_detects_modified_calibration(fairy_dirs):
+    crate = _make_crate(fairy_dirs)
     cal = next(crate.glob("calibrations/*"))
     cal.write_text("tampered: true\n")
     checks = verify.verify_archive(crate)
@@ -59,8 +59,8 @@ def test_detects_modified_calibration(fair_dirs):
     assert verify._overall(checks) == FAIL
 
 
-def test_detects_missing_bag_data_file(fair_dirs):
-    crate = _make_crate(fair_dirs)
+def test_detects_missing_bag_data_file(fairy_dirs):
+    crate = _make_crate(fairy_dirs)
     db = next(crate.glob("bags/*/*.db3"))
     db.unlink()
     checks = verify.verify_archive(crate)
@@ -68,10 +68,10 @@ def test_detects_missing_bag_data_file(fair_dirs):
                for c in checks)
 
 
-def test_assembled_bag_records_file_checksums(fair_dirs):
+def test_assembled_bag_records_file_checksums(fairy_dirs):
     """The assembler pins every bag file with a sha256 matching the archived
     bytes."""
-    harvest, context = _spool(fair_dirs)
+    harvest, context = _spool(fairy_dirs)
     record = builder.build(harvest, context)
     crate = assembler.assemble(record, harvest)
     bag = record.bags[0]
@@ -81,9 +81,9 @@ def test_assembled_bag_records_file_checksums(fair_dirs):
         assert fsio.sha256_file(bag_dir / rel) == expected
 
 
-def test_detects_modified_bag_data(fair_dirs):
+def test_detects_modified_bag_data(fairy_dirs):
     """Byte-level tamper detection — a changed .db3 fails verification."""
-    crate = _make_crate(fair_dirs)
+    crate = _make_crate(fairy_dirs)
     db = next(crate.glob("bags/*/*.db3"))
     db.write_bytes(db.read_bytes() + b"tampered")
     checks = verify.verify_archive(crate)
@@ -91,9 +91,9 @@ def test_detects_modified_bag_data(fair_dirs):
                for c in checks)
 
 
-def test_pre_1_0_archive_without_checksums_warns(fair_dirs):
+def test_pre_1_0_archive_without_checksums_warns(fairy_dirs):
     """An archive whose bags predate file_sha256 still verifies structurally."""
-    crate = _make_crate(fair_dirs)
+    crate = _make_crate(fairy_dirs)
     record_file = crate / "mission_record.json"
     data = json.loads(record_file.read_text())
     for bag in data["bags"]:
@@ -105,8 +105,8 @@ def test_pre_1_0_archive_without_checksums_warns(fair_dirs):
                for c in checks)
 
 
-def test_detects_missing_referenced_file(fair_dirs):
-    crate = _make_crate(fair_dirs)
+def test_detects_missing_referenced_file(fairy_dirs):
+    crate = _make_crate(fairy_dirs)
     (crate / "harvest" / "pip_freeze.txt").unlink()
     checks = verify.verify_archive(crate)
     assert any(c["status"] == FAIL
@@ -114,8 +114,8 @@ def test_detects_missing_referenced_file(fair_dirs):
                for c in checks)
 
 
-def test_not_in_index_warns_but_passes(fair_dirs):
-    crate = _make_crate(fair_dirs)
+def test_not_in_index_warns_but_passes(fairy_dirs):
+    crate = _make_crate(fairy_dirs)
     paths.index_db_path().unlink()  # simulate a lost/rebuilt index
     checks = verify.verify_archive(crate)
     assert FAIL not in _statuses(checks)
@@ -124,16 +124,16 @@ def test_not_in_index_warns_but_passes(fair_dirs):
     assert verify._overall(checks) == WARN
 
 
-def test_corrupt_mission_record_fails_fast(fair_dirs):
-    crate = _make_crate(fair_dirs)
+def test_corrupt_mission_record_fails_fast(fairy_dirs):
+    crate = _make_crate(fairy_dirs)
     (crate / "mission_record.json").write_text("{ not valid json")
     checks = verify.verify_archive(crate)
     assert len(checks) == 1
     assert checks[0]["status"] == FAIL
 
 
-def test_json_output(fair_dirs, capsys):
-    _make_crate(fair_dirs)
+def test_json_output(fairy_dirs, capsys):
+    _make_crate(fairy_dirs)
     args = SimpleNamespace(mission="1", json=True, debug=False)
     assert verify.run(args, console=_console()) == 0
     payload = json.loads(capsys.readouterr().out)
@@ -141,7 +141,7 @@ def test_json_output(fair_dirs, capsys):
     assert payload["checks"] and "archive" in payload
 
 
-def test_unknown_mission_errors(fair_dirs):
+def test_unknown_mission_errors(fairy_dirs):
     index._connect().close()  # ensure an (empty) index exists
     console = _console()
     args = SimpleNamespace(mission="does-not-exist", json=False, debug=False)

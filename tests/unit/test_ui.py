@@ -3,8 +3,8 @@ from unittest import mock
 
 from rich.console import Console
 
-from fair_ros.manifest import builder
-from fair_ros.ui import briefing, review, status
+from ros_fairy.manifest import builder
+from ros_fairy.ui import briefing, review, status
 
 
 def _console():
@@ -91,7 +91,7 @@ def test_confirm_save_paths():
         assert review.confirm_save(_console()) == "keep"
 
 
-def test_status_lines(fair_dirs):
+def test_status_lines(fairy_dirs):
     assert "not running" in status.assistant_line(None)
     dead = {"pid": 99999999, "state": "IDLE"}
     assert "not running" in status.assistant_line(dead)
@@ -116,9 +116,9 @@ def test_status_lines(fair_dirs):
     assert "⚠ connected hardware (partial)" in lines
 
 
-def test_show_status_renders(fair_dirs):
+def test_show_status_renders(fairy_dirs):
     console = _console()
     status.show_status(None, None, console=console)
     out = console.file.getvalue()
     assert "not started yet" in out
-    assert "fair-ros status" in out
+    assert "ros-fairy status" in out

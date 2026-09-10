@@ -1,4 +1,4 @@
-from fair_ros.utils import ros_distro
+from ros_fairy.utils import ros_distro
 
 
 def test_detect_reads_env(monkeypatch):

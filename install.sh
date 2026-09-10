@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs fair_ros for whichever ROS 2 install is (or isn't) sourced in this
+# Installs ros_fairy for whichever ROS 2 install is (or isn't) sourced in this
 # shell right now.
 #
 # No colcon workspace needed: an ament_python package is really just a
@@ -38,7 +38,7 @@ fi
 LOG="$(mktemp)"
 trap 'rm -f "$LOG"' EXIT
 
-echo "Installing fair_ros..."
+echo "Installing ros_fairy..."
 if python3 -m pip install "$TARGET" >"$LOG" 2>&1; then
     cat "$LOG"
 elif grep -qiE "permission denied|errno 13|externally-managed-environment" "$LOG"; then
@@ -64,6 +64,6 @@ Installed. Next:
     ros2 fairy doctor     # confirm it's ready to capture
 
 setup runs as you — no sudo needed to start it. It only asks for your
-password if/when it actually needs to write /etc/fair-ros and install the
+password if/when it actually needs to write /etc/ros-fairy and install the
 watchdog service.
 EOF

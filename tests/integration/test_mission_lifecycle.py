@@ -14,11 +14,11 @@ import pytest
 from inotify_simple import flags
 from rich.console import Console
 
-from fair_ros.archive import assembler
-from fair_ros.manifest import builder
-from fair_ros.subcommands import list_missions, mission_close, mission_start
-from fair_ros.utils import paths
-from fair_ros.watchdog.watchdog import Watchdog
+from ros_fairy.archive import assembler
+from ros_fairy.manifest import builder
+from ros_fairy.subcommands import list_missions, mission_close, mission_start
+from ros_fairy.utils import paths
+from ros_fairy.watchdog.watchdog import Watchdog
 from tests.conftest import make_bag
 from tests.unit.test_archive import _spool
 from tests.unit.test_watchdog import FakeClock, FakeINotify, good_pipeline
@@ -30,7 +30,7 @@ def _console():
     return Console(file=io.StringIO(), width=120, force_terminal=False)
 
 
-def test_full_mission_lifecycle(fair_dirs, tmp_path, capsys):
+def test_full_mission_lifecycle(fairy_dirs, tmp_path, capsys):
     # 1. watchdog comes up with an empty spool (boot)
     ino, clock = FakeINotify(), FakeClock()
     dog = Watchdog(inotify=ino, clock=clock, pipeline=good_pipeline,
@@ -99,7 +99,7 @@ def test_full_mission_lifecycle(fair_dirs, tmp_path, capsys):
     assert "1" in listing  # the warning column
 
     # 7. the saved archive stands up to verification
-    from fair_ros.subcommands import verify
+    from ros_fairy.subcommands import verify
     v_args = SimpleNamespace(mission="1", json=True, debug=False)
     assert verify.run(v_args, console=_console()) == 0
     v = json.loads(capsys.readouterr().out)
@@ -107,7 +107,7 @@ def test_full_mission_lifecycle(fair_dirs, tmp_path, capsys):
     assert not any(c["status"] == "fail" for c in v["checks"])
 
     # 8. it exports to a portable bundle with a checksum sidecar
-    from fair_ros.subcommands import export
+    from ros_fairy.subcommands import export
     e_args = SimpleNamespace(mission="1", output=str(tmp_path / "out"),
                              format="zip", force=False, json=True, debug=False)
     (tmp_path / "out").mkdir()
@@ -118,7 +118,7 @@ def test_full_mission_lifecycle(fair_dirs, tmp_path, capsys):
     assert any(f.name.endswith(".sha256") for f in exported)
 
     # 9. a second mission (adopted bag, different goal) diffs against the first
-    from fair_ros.subcommands import adopt, mission_diff
+    from ros_fairy.subcommands import adopt, mission_diff
     answers2 = {"operator_name": "Jane Doe", "goal": "Follow-up transect",
                 "location_name": "Marsh Creek, north bank",
                 "environment": "marine", "notes": None}
@@ -144,8 +144,8 @@ def test_full_mission_lifecycle(fair_dirs, tmp_path, capsys):
     assert goal_change and goal_change[0]["b"] == "Follow-up transect"
 
     # 10. a lost index is rebuilt from the archives on disk
-    from fair_ros.archive import index
-    from fair_ros.subcommands import reindex
+    from ros_fairy.archive import index
+    from ros_fairy.subcommands import reindex
     paths.index_db_path().unlink()
     assert reindex.run(SimpleNamespace(json=False, debug=False),
                        console=_console()) == 0
@@ -153,14 +153,14 @@ def test_full_mission_lifecycle(fair_dirs, tmp_path, capsys):
     assert total == 2
 
 
-def test_crate_loads_with_rocrate_library(fair_dirs):
+def test_crate_loads_with_rocrate_library(fairy_dirs):
     """The generated crate must be loadable by the rocrate library.
 
     Skipped when the optional rocrate dependency is not installed.
     """
     ROCrate = pytest.importorskip("rocrate.rocrate").ROCrate
 
-    harvest, context = _spool(fair_dirs)
+    harvest, context = _spool(fairy_dirs)
     record = builder.build(harvest, context)
     crate_dir = assembler.assemble(record, harvest)
 

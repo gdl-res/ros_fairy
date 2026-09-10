@@ -11,7 +11,7 @@
 
 ## What it is
 
-`fair_ros` is a ROS 2 CLI extension (`ros2 fairy ...`) plus a background watchdog
+`ros_fairy` is a ROS 2 CLI extension (`ros2 fairy ...`) plus a background watchdog
 service. An operator answers five questions before a run; everything else —
 robot identity, ROS graph and node descriptions, sensors seen publishing,
 Python environment, Docker images, hardware devices, system info — is harvested
@@ -38,11 +38,22 @@ is colcon-specific:
 
 ```bash
 cd ~/ros2_ws/src && git clone https://github.com/gdl-res/ros_fairy.git
-cd ~/ros2_ws && colcon build --packages-select fair_ros
+cd ~/ros2_ws && colcon build --packages-select ros_fairy
 source install/setup.bash
 ros2 fairy setup
 ros2 fairy doctor
 ```
+
+### Uninstall
+
+```bash
+./uninstall.sh
+```
+
+Removes the watchdog service, `/etc/ros-fairy`, the `ros-fairy` group, and the
+Python package — a clean reverse of `install.sh` + `setup`. It does **not**
+touch your saved missions (`/var/ros-fairy/archive`, `/var/ros-fairy/index.db`);
+it just reminds you where they are.
 
 ## A mission, start to finish
 
@@ -76,11 +87,11 @@ ros2 fairy export 1            # bundle the newest mission + sha256 sidecar
 
 | Path | Contents |
 | --- | --- |
-| `/etc/fair-ros` | `robot_identity.yaml`, watchdog environment |
-| `/var/fair-ros/spool` | live harvest, session env, in-progress bags |
-| `/var/fair-ros/archive` | saved mission crates and the mission index |
+| `/etc/ros-fairy` | `robot_identity.yaml`, watchdog environment |
+| `/var/ros-fairy/spool` | live harvest, session env, in-progress bags |
+| `/var/ros-fairy/archive` | saved mission crates and the mission index |
 
-Both roots are overridable with `FAIR_ROS_CONFIG_DIR` and `FAIR_ROS_VAR_DIR`.
+Both roots are overridable with `ROS_FAIRY_CONFIG_DIR` and `ROS_FAIRY_VAR_DIR`.
 
 ## Development
 
@@ -88,7 +99,7 @@ Both roots are overridable with `FAIR_ROS_CONFIG_DIR` and `FAIR_ROS_VAR_DIR`.
 pip install -e '.[dev]'
 pytest                        # unit + integration, no ROS required
 pytest -m ros                 # live smoke tests, on a sourced ROS 2 box
-ruff check . && mypy fair_ros
+ruff check . && mypy ros_fairy
 ```
 
 ## License

@@ -2,7 +2,7 @@ import importlib.util
 
 import pytest
 
-from fair_ros.utils import bag_repair, topic_health
+from ros_fairy.utils import bag_repair, topic_health
 from tests.conftest import make_mcap_bag
 
 _MCAP_PRESENT = importlib.util.find_spec("mcap") is not None

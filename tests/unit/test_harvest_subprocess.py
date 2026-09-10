@@ -6,8 +6,8 @@ from unittest import mock
 
 import pytest
 
-from fair_ros.harvest import docker_info, ros_graph, system_info
-from fair_ros.harvest.ros_graph import RosGraphError
+from ros_fairy.harvest import docker_info, ros_graph, system_info
+from ros_fairy.harvest.ros_graph import RosGraphError
 
 
 def _completed(stdout="", returncode=0, stderr=""):
