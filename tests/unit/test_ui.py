@@ -82,6 +82,100 @@ def test_summary_is_plain_language():
     assert "{" not in out
 
 
+def test_summary_deduplicates_identical_warnings_across_bags():
+    """A multi-bag mission where the same sensor stayed silent in every bag
+    must not repeat the identical warning once per bag (reported 2026-09-11:
+    a 2-bag mission showed "Camera produced no data at all" four times for
+    two silent cameras — the same fact stated twice each, not four facts)."""
+    harvest = builder.compose_harvest(
+        identity={
+            "robot": {"name": "Heron-02", "platform": "Heron USV",
+                      "serial_number": "H02", "owner_organization": "Lab",
+                      "owner_contact": "a@b.c"},
+            "sensors": [{"sensor_id": "cam0", "type": "camera",
+                         "make_model": "Realsense D456", "topic": "/cam",
+                         "frame_id": None, "calibration_ref": None}],
+            "calibrations": [], "default_license": None},
+        system={"hostname": "r1", "kernel": "Linux", "arch": "x86_64",
+                "ros_distro": "jazzy", "apt_ros_versions": {}},
+        graph={"captured_at": "2026-06-12T14:03:00+00:00", "nodes": [],
+               "topics": [], "ros_packages": [], "parameters": {},
+               "complete": True},
+        docker=None, descriptions=None,
+        harvest_status={"robot_identity": "ok", "system_info": "ok",
+                        "ros_graph": "ok", "ros_descriptions": "timeout",
+                        "docker_info": "skipped"})
+    warning = {"topic": "/cam", "sensor_id": "cam0", "kind": "never_published",
+              "start_offset_s": None, "duration_s": None,
+              "plain_text": "Camera produced no data at all during this "
+                            "recording."}
+    bag = {"path": "bags/rosbag2_0", "storage_format": "sqlite3",
+          "size_bytes": 1000, "start_time": "2026-06-12T14:03:00+00:00",
+          "end_time": "2026-06-12T14:04:00+00:00", "duration_s": 60.0,
+          "message_count": 0, "topics": [], "health_warnings": [warning]}
+    harvest["bags"] = [bag, {**bag, "path": "bags/rosbag2_1"}]
+    context = builder.new_mission_context(
+        operator_name="Jane Doe", goal="Survey eelgrass",
+        location_name="Marsh Creek")
+    record = builder.build(harvest, context)
+    console = _console()
+    review.show_summary(record, builder.harvest_level_warnings(harvest),
+                        console=console)
+    out = console.file.getvalue()
+    assert out.count("Camera produced no data at all") == 1
+
+
+def test_summary_renders_compressed_transport_as_a_note_not_a_warning():
+    """A compressed_transport health_warning is informational: rendered
+    with 'ℹ' (not '⚠'), and the sensor still shows as OK in the Sensors
+    list — it did publish, just not on the exact declared topic."""
+    from ros_fairy.manifest import quality as quality_mod
+    harvest = builder.compose_harvest(
+        identity={
+            "robot": {"name": "Heron-02", "platform": "Heron USV",
+                      "serial_number": "H02", "owner_organization": "Lab",
+                      "owner_contact": "a@b.c"},
+            "sensors": [{"sensor_id": "cam0", "type": "camera",
+                         "make_model": "Realsense D456", "topic": "/cam",
+                         "frame_id": None, "calibration_ref": None}],
+            "calibrations": [], "default_license": None},
+        system={"hostname": "r1", "kernel": "Linux", "arch": "x86_64",
+                "ros_distro": "jazzy", "apt_ros_versions": {}},
+        graph={"captured_at": "2026-06-12T14:03:00+00:00", "nodes": ["/cam_node"],
+               "topics": [{"name": "/cam", "type": "t"}], "ros_packages": [],
+               "parameters": {}, "complete": True},
+        docker=None, descriptions=None,
+        harvest_status={"robot_identity": "ok", "system_info": "ok",
+                        "ros_graph": "ok", "ros_descriptions": "ok",
+                        "docker_info": "skipped"})
+    note = {"topic": "/cam/compressed", "sensor_id": "cam0",
+           "kind": "compressed_transport",
+           "start_offset_s": None, "duration_s": None,
+           "plain_text": "Camera was recorded through its compressed "
+                         "stream instead of the raw one."}
+    harvest["bags"] = [{
+        "path": "bags/rosbag2_0", "storage_format": "sqlite3",
+        "size_bytes": 1000, "start_time": "2026-06-12T14:03:00+00:00",
+        "end_time": "2026-06-12T14:04:00+00:00", "duration_s": 60.0,
+        "message_count": 100, "topics": [], "health_warnings": [note],
+    }]
+    context = builder.new_mission_context(
+        operator_name="Jane Doe", goal="Survey eelgrass",
+        location_name="Marsh Creek")
+    record = builder.build(harvest, context)
+    quality = quality_mod.assess(record, harvest)
+    assert quality.level == quality_mod.OK
+
+    console = _console()
+    review.show_summary(record, builder.harvest_level_warnings(harvest),
+                        console=console, quality=quality)
+    out = console.file.getvalue()
+    assert "ℹ" in out
+    assert "compressed stream" in out
+    assert "⚠" not in out
+    assert "✓ Realsense D456" in out
+
+
 def test_confirm_save_paths():
     with mock.patch.object(review.Confirm, "ask", side_effect=[True]):
         assert review.confirm_save(_console()) == "save"

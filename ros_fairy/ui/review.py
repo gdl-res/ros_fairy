@@ -9,7 +9,7 @@ from rich.text import Text
 from ros_fairy.manifest import quality as quality_mod
 from ros_fairy.manifest.quality import Quality
 from ros_fairy.manifest.schema import MissionRecord
-from ros_fairy.utils.topic_health import humanize_duration
+from ros_fairy.utils.topic_health import INFO_KINDS, humanize_duration
 
 _QUALITY_LABEL = {
     quality_mod.DEGRADED: ("INCOMPLETE", "yellow"),
@@ -52,8 +52,12 @@ def show_summary(record: MissionRecord, harvest_warnings: list[str],
                   f"{n} recording{'s' if n != 1 else ''}, "
                   f"{length}, {human_size(total_bytes)}")
 
+    # INFO_KINDS (e.g. a camera recorded on its compressed stream) describe
+    # something worth knowing, not something wrong — a sensor with only an
+    # info-kind warning still reads as fine in the Sensors list.
     warned_sensors = {w.sensor_id for b in record.bags
-                      for w in b.health_warnings if w.sensor_id}
+                      for w in b.health_warnings
+                      if w.sensor_id and w.kind not in INFO_KINDS}
     sensor_lines = []
     for sensor in record.sensors:
         ok = sensor.detected_at_start and sensor.sensor_id not in \
@@ -62,8 +66,18 @@ def show_summary(record: MissionRecord, harvest_warnings: list[str],
         sensor_lines.append(Text(f" {glyph} {sensor.make_model}",
                                  style=style))
 
-    warnings = list(harvest_warnings)
-    warnings += [w.plain_text for b in record.bags for w in b.health_warnings]
+    # A multi-bag mission (a foreign recording adopted mid-mission, a
+    # retry, ...) commonly repeats the *identical* warning per bag — e.g.
+    # "Camera produced no data at all" once for each bag a disconnected
+    # camera sat silent in. That's the same fact stated N times, not N
+    # facts; collapse to one line each (order preserved) rather than
+    # drowning the review in duplicates.
+    health = [w for b in record.bags for w in b.health_warnings]
+    warnings = list(dict.fromkeys(
+        harvest_warnings
+        + [w.plain_text for w in health if w.kind not in INFO_KINDS]))
+    notes = list(dict.fromkeys(
+        w.plain_text for w in health if w.kind in INFO_KINDS))
     body: list = []
     border = "cyan"
     if quality is not None and quality.level in _QUALITY_LABEL:
@@ -86,6 +100,9 @@ def show_summary(record: MissionRecord, harvest_warnings: list[str],
     if warnings:
         body += [Text(""), Text("Things worth knowing", style="bold")]
         body += [Text(f" ⚠ {w}", style="yellow") for w in warnings]
+    if notes:
+        body += [Text("")]
+        body += [Text(f" ℹ {n}", style="dim") for n in notes]
     console.print(Panel(Group(*body), title="Mission summary",
                         border_style=border))
 

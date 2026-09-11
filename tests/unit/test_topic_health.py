@@ -66,6 +66,88 @@ def test_never_published(tmp_path):
     assert w["sensor_id"] == "sonar0"
     assert "Sonar" in w["plain_text"]
     assert "no data at all" in w["plain_text"]
+    # SENSORS has exactly one sensor of each type, so it's unambiguous —
+    # exact match guards the plain (no make/model) wording.
+    assert w["plain_text"] == \
+        "Sonar produced no data at all during this recording."
+
+
+# Same make/model on purpose — a stereo pair or front/rear pair of identical
+# cameras is the common case, and make/model alone couldn't disambiguate it;
+# only sensor_id (chosen by the operator at setup) is guaranteed unique.
+CAMERA_PAIR = [
+    {"sensor_id": "cam0", "type": "camera",
+     "make_model": "Intel Realsense D456", "topic": "/cam0/image_raw"},
+    {"sensor_id": "cam1", "type": "camera",
+     "make_model": "Intel Realsense D456", "topic": "/cam1/image_raw"},
+]
+
+
+def test_never_published_disambiguates_same_type_sensors(tmp_path):
+    """Two declared cameras of the same make/model: a bare "Camera produced
+    no data" warning can't tell the operator which one — name it by
+    sensor_id, "like they were registered" (reported 2026-09-11: a real
+    mission with two identical Realsense D456s where only the sensor_id
+    could distinguish the working one from the dead one)."""
+    bag = make_bag(tmp_path / "bag",
+                   {"/cam0/image_raw": _steady(T0, T0 + 60, 10)})
+    warnings = topic_health.analyse_bag(bag, CAMERA_PAIR)
+    assert len(warnings) == 1
+    assert warnings[0]["sensor_id"] == "cam1"
+    assert warnings[0]["plain_text"] == (
+        "Camera (cam1) produced no data at all during this recording.")
+
+
+def test_gap_warning_disambiguates_same_type_sensors(tmp_path):
+    stamps = _steady(T0, T0 + 120, 10) + _steady(T0 + 360, T0 + 720, 10)
+    bag = make_bag(tmp_path / "bag", {
+        "/cam0/image_raw": stamps,
+        "/cam1/image_raw": _steady(T0, T0 + 720, 10),
+    })
+    warnings = topic_health.analyse_bag(bag, CAMERA_PAIR)
+    assert len(warnings) == 1
+    assert warnings[0]["sensor_id"] == "cam0"
+    assert "Camera (cam0)" in warnings[0]["plain_text"]
+
+
+def test_never_published_falls_back_to_compressed_variant(tmp_path):
+    """A camera registered on its raw topic but only recorded via
+    image_transport's compressed sibling must not be reported as silent —
+    it published, just not on the exact declared topic name (reported
+    2026-09-11: a `ros2 bag record` that only captured .../compressed while
+    the sensor was registered on the raw .../image_raw topic)."""
+    bag = make_bag(tmp_path / "bag", {
+        "/cam0/image_raw/compressed": _steady(T0, T0 + 60, 10),
+    }, types={"/cam0/image_raw/compressed": "sensor_msgs/msg/CompressedImage"})
+    warnings = topic_health.analyse_bag(bag, [CAMERA_PAIR[0]])
+    assert len(warnings) == 1
+    w = warnings[0]
+    assert w["kind"] == "compressed_transport"
+    assert w["sensor_id"] == "cam0"
+    assert "compressed stream" in w["plain_text"]
+    assert "no data at all" not in w["plain_text"]
+
+
+def test_never_published_stands_when_compressed_variant_also_silent(tmp_path):
+    """If neither the raw topic nor any compressed sibling has data, the
+    sensor really is silent — the original warning must still fire."""
+    bag = make_bag(tmp_path / "bag", {"/unrelated": _steady(T0, T0 + 60, 10)})
+    warnings = topic_health.analyse_bag(bag, [CAMERA_PAIR[0]])
+    assert len(warnings) == 1
+    assert warnings[0]["kind"] == "never_published"
+
+
+def test_compressed_variant_fallback_is_camera_only(tmp_path):
+    """The image_transport convention doesn't apply to non-camera sensors —
+    a coincidentally "/compressed"-suffixed topic must not silence a
+    genuinely-missing GPS/lidar/etc. warning."""
+    sensor = {"sensor_id": "gps0", "type": "gps",
+             "make_model": "u-blox ZED-F9P", "topic": "/fix"}
+    bag = make_bag(tmp_path / "bag",
+                   {"/fix/compressed": _steady(T0, T0 + 60, 10)})
+    warnings = topic_health.analyse_bag(bag, [sensor])
+    assert len(warnings) == 1
+    assert warnings[0]["kind"] == "never_published"
 
 
 def test_trailing_gap(tmp_path):
