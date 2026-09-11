@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import Any
 
 from ros_fairy.manifest.schema import MissionRecord
-from ros_fairy.utils import paths
+from ros_fairy.utils import paths, topic_health
 
-DB_VERSION = "2"
+DB_VERSION = "3"
 
 
 class IndexUnavailableError(Exception):
@@ -46,6 +46,17 @@ CREATE INDEX IF NOT EXISTS idx_missions_location
 CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY, value TEXT NOT NULL
 );
+-- One row per bag per mission; lets mission_close ask "have I already saved
+-- a bag exactly like this one?" (topic_health.bag_fingerprint) before the
+-- operator commits to saving — see archive/duplicates.py.
+CREATE TABLE IF NOT EXISTS mission_bags (
+    mission_id  TEXT NOT NULL,
+    fingerprint TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mission_bags_fingerprint
+    ON mission_bags(fingerprint);
+CREATE INDEX IF NOT EXISTS idx_mission_bags_mission
+    ON mission_bags(mission_id);
 """
 
 
@@ -123,9 +134,54 @@ def _row_from_record(record: MissionRecord, archive_path: Path) -> tuple:
     )
 
 
+def _replace_bag_fingerprints(con: sqlite3.Connection,
+                              record: MissionRecord) -> None:
+    con.execute("DELETE FROM mission_bags WHERE mission_id = ?",
+               (record.identity.mission_id,))
+    con.executemany(
+        "INSERT INTO mission_bags (mission_id, fingerprint) VALUES (?, ?)",
+        [(record.identity.mission_id, topic_health.bag_fingerprint(b))
+         for b in record.bags])
+
+
 def insert(record: MissionRecord, archive_path: Path) -> None:
     with _connect() as con:
         con.execute(_INSERT, _row_from_record(record, archive_path))
+        _replace_bag_fingerprints(con, record)
+
+
+def find_bag_duplicate(fingerprints: list[str],
+                       exclude_mission_id: str | None = None) -> dict | None:
+    """The most recent already-saved mission sharing any of ``fingerprints``.
+
+    None if the index is unavailable/unreadable — this is a courtesy check,
+    never fatal (mirrors ``duplicates.find_similar``).
+    """
+    if not fingerprints or not Path(paths.index_db_path()).exists():
+        return None
+    try:
+        con = _connect()
+    except sqlite3.OperationalError:
+        con = _connect_readonly()
+    try:
+        placeholders = ", ".join("?" for _ in fingerprints)
+        params: list[Any] = list(fingerprints)
+        exclude_clause = ""
+        if exclude_mission_id is not None:
+            exclude_clause = "AND m.mission_id != ?"
+            params.append(exclude_mission_id)
+        row = con.execute(
+            f"SELECT m.* FROM missions m "
+            f"JOIN mission_bags b ON b.mission_id = m.mission_id "
+            f"WHERE b.fingerprint IN ({placeholders}) {exclude_clause} "
+            f"ORDER BY m.created_at DESC LIMIT 1", params).fetchone()
+    except sqlite3.OperationalError as exc:
+        if "no such table" in str(exc):
+            return None
+        raise
+    finally:
+        con.close()
+    return dict(row) if row else None
 
 
 def query(operator: str | None = None, location: str | None = None,
@@ -182,6 +238,7 @@ def reindex(archive_root: Path | None = None) -> int:
     count = 0
     with _connect() as con:
         con.execute("DELETE FROM missions")
+        con.execute("DELETE FROM mission_bags")
         for record_file in sorted(archive_root.glob("*/mission_record.json")):
             try:
                 record = MissionRecord.model_validate(
@@ -189,5 +246,6 @@ def reindex(archive_root: Path | None = None) -> int:
             except Exception:
                 continue
             con.execute(_INSERT, _row_from_record(record, record_file.parent))
+            _replace_bag_fingerprints(con, record)
             count += 1
     return count

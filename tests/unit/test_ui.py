@@ -128,6 +128,26 @@ def test_summary_deduplicates_identical_warnings_across_bags():
     assert out.count("Camera produced no data at all") == 1
 
 
+def test_summary_renders_exact_duplicate_more_assertively_than_possible_one():
+    """A content-matched duplicate is a much stronger claim than the fuzzy
+    location/time heuristic — distinct styling ('✗', red) and wording, and
+    it wins the panel border color."""
+    record, harvest = _record()
+    console = _console()
+    review.show_summary(
+        record, builder.harvest_level_warnings(harvest), console=console,
+        duplicates=["You already saved a mission 20 minutes ago at "
+                   '"Marsh Creek" ("Survey eelgrass").'],
+        exact_duplicate='This looks like the same recording as the mission '
+                       'you already saved as "Survey eelgrass" at "Marsh '
+                       'Creek" — not just a similar one.')
+    out = console.file.getvalue()
+    assert "Duplicate recording" in out
+    assert "✗" in out
+    assert "Possible duplicate" in out
+    assert "⚠" in out
+
+
 def test_summary_renders_compressed_transport_as_a_note_not_a_warning():
     """A compressed_transport health_warning is informational: rendered
     with 'ℹ' (not '⚠'), and the sensor still shows as OK in the Sensors

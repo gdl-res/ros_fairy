@@ -342,3 +342,48 @@ def test_non_sensor_topic_gets_at_most_one_gap_line(tmp_path):
     diag = [w for w in warnings if w["topic"] == "/diagnostics"]
     assert len(diag) == 1
     assert "dropped out" in diag[0]["plain_text"]
+
+
+# -- bag_fingerprint -----------------------------------------------------------
+
+def _bag_dict(**overrides):
+    base = {"size_bytes": 1_048_576, "message_count": 6001,
+           "duration_s": 600.0,
+           "topics": [{"name": "/fix", "message_count": 6001}]}
+    base.update(overrides)
+    return base
+
+
+def test_bag_fingerprint_matches_for_identical_content():
+    assert topic_health.bag_fingerprint(_bag_dict()) == \
+        topic_health.bag_fingerprint(_bag_dict())
+
+
+def test_bag_fingerprint_differs_on_message_count():
+    a = topic_health.bag_fingerprint(_bag_dict())
+    b = topic_health.bag_fingerprint(_bag_dict(message_count=6002))
+    assert a != b
+
+
+def test_bag_fingerprint_differs_on_topic_counts():
+    a = topic_health.bag_fingerprint(_bag_dict())
+    b = topic_health.bag_fingerprint(_bag_dict(
+        topics=[{"name": "/fix", "message_count": 6000}]))
+    assert a != b
+
+
+def test_bag_fingerprint_ignores_topic_order():
+    a = _bag_dict(topics=[{"name": "/fix", "message_count": 1},
+                         {"name": "/depth", "message_count": 2}])
+    b = _bag_dict(topics=[{"name": "/depth", "message_count": 2},
+                         {"name": "/fix", "message_count": 1}])
+    assert topic_health.bag_fingerprint(a) == topic_health.bag_fingerprint(b)
+
+
+def test_bag_fingerprint_accepts_pydantic_bag_model():
+    from ros_fairy.manifest.schema import Bag, BagTopic
+    bag = Bag(path="bags/x", storage_format="sqlite3", size_bytes=1_048_576,
+             duration_s=600.0, message_count=6001,
+             topics=[BagTopic(name="/fix", type="t", message_count=6001)])
+    assert topic_health.bag_fingerprint(bag) == \
+        topic_health.bag_fingerprint(_bag_dict())

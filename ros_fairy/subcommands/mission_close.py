@@ -169,9 +169,12 @@ def run(args, console: Console | None = None) -> int:
     from ros_fairy.archive import duplicates
     dup_msgs = [duplicates.describe(record, row)
                 for row in duplicates.find_similar(record)]
+    exact_row = duplicates.find_exact_duplicate(record)
+    exact_msg = duplicates.describe_exact(exact_row) if exact_row else None
 
     review.show_summary(record, builder.harvest_level_warnings(harvest),
-                        console=console, quality=quality, duplicates=dup_msgs)
+                        console=console, quality=quality, duplicates=dup_msgs,
+                        exact_duplicate=exact_msg)
     decision = review.confirm_save(
         console=console, risky=quality.level == quality_mod.POOR)
 

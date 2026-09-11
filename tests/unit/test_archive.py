@@ -537,3 +537,97 @@ def test_index_migrates_pre_v2_database(fairy_dirs):
     index.insert(record, paths.archive_dir() / "x")  # must not raise
     rows, _ = index.query()
     assert rows[0]["data_quality"] == "degraded"
+
+
+def test_index_migrates_pre_v3_database_gets_mission_bags_table(fairy_dirs):
+    import sqlite3
+    # A v2 database has no mission_bags table; _connect must add it.
+    paths.index_db_path().parent.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(paths.index_db_path())
+    con.execute("CREATE TABLE missions (mission_id TEXT PRIMARY KEY, "
+                "created_at TEXT, operator TEXT, location TEXT, goal TEXT, "
+                "archive_path TEXT UNIQUE, duration_s REAL, size_bytes INTEGER, "
+                "bag_count INTEGER, warning_count INTEGER, robot_name TEXT, "
+                "ros_fairy_version TEXT, schema_version TEXT, data_quality TEXT)")
+    con.commit()
+    con.close()
+
+    harvest, context = _spool(fairy_dirs)
+    record = builder.build(harvest, context)
+    index.insert(record, paths.archive_dir() / "x")  # must not raise
+
+
+def test_insert_populates_bag_fingerprints(fairy_dirs):
+    from ros_fairy.utils.topic_health import bag_fingerprint
+    harvest, context = _spool(fairy_dirs)
+    record = builder.build(harvest, context)
+    index.insert(record, paths.archive_dir() / "x")
+    match = index.find_bag_duplicate([bag_fingerprint(record.bags[0])])
+    assert match is not None
+    assert match["mission_id"] == record.identity.mission_id
+
+
+def test_find_bag_duplicate_excludes_named_mission(fairy_dirs):
+    from ros_fairy.utils.topic_health import bag_fingerprint
+    harvest, context = _spool(fairy_dirs)
+    record = builder.build(harvest, context)
+    index.insert(record, paths.archive_dir() / "x")
+    fp = bag_fingerprint(record.bags[0])
+    assert index.find_bag_duplicate(
+        [fp], exclude_mission_id=record.identity.mission_id) is None
+    assert index.find_bag_duplicate([fp]) is not None
+
+
+def test_find_bag_duplicate_no_match_for_different_content(fairy_dirs):
+    harvest, context = _spool(fairy_dirs)
+    record = builder.build(harvest, context)
+    index.insert(record, paths.archive_dir() / "x")
+    assert index.find_bag_duplicate(["not-a-real-fingerprint"]) is None
+
+
+def test_reindex_repopulates_bag_fingerprints(fairy_dirs):
+    from ros_fairy.utils.topic_health import bag_fingerprint
+    harvest, context = _spool(fairy_dirs)
+    record = builder.build(harvest, context)
+    final = paths.archive_dir() / "x"
+    final.mkdir(parents=True)
+    fsio.atomic_write_json(final / "mission_record.json",
+                           record.model_dump(mode="json"))
+    paths.index_db_path().unlink(missing_ok=True)
+    assert index.reindex() == 1
+    match = index.find_bag_duplicate([bag_fingerprint(record.bags[0])])
+    assert match is not None and match["mission_id"] == \
+        record.identity.mission_id
+
+
+def test_find_exact_duplicate_flags_matching_content(fairy_dirs):
+    from ros_fairy.archive import duplicates
+    harvest, context = _spool(fairy_dirs)
+    saved = builder.build(harvest, context)
+    assembler.assemble(saved, harvest)
+
+    # _spool() with the same T0/params reproduces identical bag content —
+    # same fingerprint, a different mission_id/timestamp.
+    harvest2, context2 = _spool(fairy_dirs)
+    record2 = builder.build(harvest2, context2)
+
+    match = duplicates.find_exact_duplicate(record2)
+    assert match is not None
+    assert match["mission_id"] == saved.identity.mission_id
+    msg = duplicates.describe_exact(match)
+    assert "same recording" in msg
+
+
+def test_find_exact_duplicate_no_match_for_different_recording(fairy_dirs):
+    from ros_fairy.archive import duplicates
+    harvest, context = _spool(fairy_dirs)
+    saved = builder.build(harvest, context)
+    assembler.assemble(saved, harvest)
+
+    harvest2, context2 = _spool(fairy_dirs)
+    # Genuinely different content this time — same-shaped bag, different
+    # message count — must not be mistaken for the same recording.
+    harvest2["bags"][0]["message_count"] = 42
+    harvest2["bags"][0]["topics"][0]["message_count"] = 42
+    record2 = builder.build(harvest2, context2)
+    assert duplicates.find_exact_duplicate(record2) is None

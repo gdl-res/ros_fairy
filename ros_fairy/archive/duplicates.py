@@ -1,11 +1,24 @@
-"""Detect a near-duplicate of a mission about to be saved.
+"""Detect a duplicate mission about to be saved.
 
-Catches the field mistake where an operator re-briefs and saves the same outing
-twice, often with a typo in the place name (e.g. "Crosslab" vs "Crossloab"). We
-look in the index for a recently-saved mission by the same operator at a very
-similar location and surface it at ``mission_close`` so the operator can notice
-before saving a confusing duplicate. It never blocks — repeat missions at one
-place are legitimate.
+Two different problems, two different checks:
+
+- ``find_similar``/``describe``: catches the field *mistake* where an
+  operator re-briefs and saves the same outing twice, often with a typo in
+  the place name (e.g. "Crosslab" vs "Crossloab"). A fuzzy, time-windowed
+  heuristic on operator-typed metadata — it can't tell a genuine mistake
+  from a routine repeat visit, so it only fires within a short window (see
+  ``DEFAULT_WINDOW``).
+- ``find_exact_duplicate``/``describe_exact``: catches actually
+  *reprocessing the same recording* — a mission_close retry, a bag
+  ``adopt``ed twice — by content fingerprint (``topic_health.
+  bag_fingerprint``), regardless of how much time has passed. No fuzziness:
+  two independently-recorded bags matching on size, message count, duration
+  and every per-topic count simultaneously is practically impossible, so
+  this can be stated with much more confidence than the metadata heuristic.
+
+Both are surfaced at ``mission_close`` so the operator can notice before
+saving a confusing duplicate. Neither blocks — the dashcam principle is to
+never lose a recording; the choice stays with the operator.
 """
 
 import difflib
@@ -13,7 +26,7 @@ from datetime import datetime, timedelta
 
 from ros_fairy.archive import index
 from ros_fairy.manifest.schema import MissionRecord
-from ros_fairy.utils.topic_health import humanize_duration
+from ros_fairy.utils.topic_health import bag_fingerprint, humanize_duration
 
 # A location this close (0..1) counts as "the same place, maybe mistyped".
 # "crosslab"/"crossloab" ≈ 0.94; unrelated names fall well below.
@@ -77,3 +90,29 @@ def describe(record: MissionRecord, row: dict) -> str:
             f'("{row["goal"]}"). Save this only if it really is a different '
             "mission — otherwise you may be duplicating it (check for a typo "
             "in the place name).")
+
+
+def find_exact_duplicate(record: MissionRecord) -> dict | None:
+    """The already-saved mission whose bags this recording matches, if any.
+
+    Unlike ``find_similar``, this has no time window and no location
+    matching — a content match is a content match regardless of when or
+    where the operator says it happened. Index errors degrade to no match —
+    this is a courtesy check, never fatal.
+    """
+    if not record.bags:
+        return None
+    fingerprints = [bag_fingerprint(b) for b in record.bags]
+    try:
+        return index.find_bag_duplicate(
+            fingerprints, exclude_mission_id=record.identity.mission_id)
+    except Exception:
+        return None
+
+
+def describe_exact(row: dict) -> str:
+    """A plain-language one-liner: this looks like the same recording."""
+    return (f'This looks like the same recording as the mission you already '
+            f'saved as "{row["goal"]}" at "{row["location"]}" — not just a '
+            "similar one. Saving again will create a second copy of the "
+            "same data.")

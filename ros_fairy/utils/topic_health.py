@@ -19,6 +19,8 @@ timestamps (and reports it unknown when the clock was broken for most of the
 run), while ``read_clean_series`` drops those outliers before gap detection.
 """
 
+import hashlib
+import json
 import statistics
 from pathlib import Path
 from typing import Any
@@ -402,3 +404,35 @@ def analyse_bag(bag_dir: Path, sensors: list[dict] | None = None, *,
             if low:
                 warnings.append(low)
     return warnings
+
+
+def bag_fingerprint(bag: Any) -> str:
+    """A content fingerprint for ``bag`` (a schema.Bag or an equal-shaped
+    dict), cheap enough to compute before a mission is archived.
+
+    Deliberately *not* a file checksum: those (``Bag.file_sha256``) are only
+    known after ``assembler.assemble()`` has already copied/hashed the bag —
+    by mission_close review time, before the operator has even decided to
+    save, that work hasn't happened yet and re-hashing a multi-GB bag just
+    to ask "have I seen this before?" would double the I/O cost of every
+    single save. Size + message count + duration + the exact per-topic
+    message counts is not cryptographic, but two independently-recorded
+    bags matching on all of that simultaneously is practically impossible —
+    good enough to detect the same recording being processed twice (a
+    mission_close retry, a bag adopted more than once), which is what this
+    is for. It is not meant to catch two merely-similar recordings.
+    """
+
+    def get(obj: Any, name: str) -> Any:
+        return obj.get(name) if isinstance(obj, dict) else getattr(obj, name)
+
+    topics = sorted(
+        (get(t, "name"), get(t, "message_count")) for t in get(bag, "topics"))
+    duration_s = get(bag, "duration_s")
+    payload = json.dumps([
+        get(bag, "size_bytes"),
+        get(bag, "message_count"),
+        round(duration_s, 3) if duration_s is not None else None,
+        topics,
+    ], sort_keys=True)
+    return hashlib.sha256(payload.encode()).hexdigest()

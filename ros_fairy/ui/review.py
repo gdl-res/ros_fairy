@@ -28,7 +28,8 @@ def human_size(size_bytes: int) -> str:
 def show_summary(record: MissionRecord, harvest_warnings: list[str],
                  console: Console | None = None,
                  quality: Quality | None = None,
-                 duplicates: list[str] | None = None) -> None:
+                 duplicates: list[str] | None = None,
+                 exact_duplicate: str | None = None) -> None:
     console = console or Console()
     facts = Table.grid(padding=(0, 2))
     facts.add_column(style="bold")
@@ -88,6 +89,14 @@ def show_summary(record: MissionRecord, harvest_warnings: list[str],
                                   style="bold")]
         body += [Text(f" • {reason}", style=color)
                  for reason in quality.reasons]
+        body += [Text("")]
+    if exact_duplicate:
+        # A content match, not a metadata guess — state it with more
+        # confidence than the fuzzy location/time heuristic below, and let
+        # it win the border color (it's the more certain signal).
+        border = "red"
+        body += [Text("Duplicate recording", style="bold red")]
+        body += [Text(f" ✗ {exact_duplicate}", style="red")]
         body += [Text("")]
     if duplicates:
         if border == "cyan":
