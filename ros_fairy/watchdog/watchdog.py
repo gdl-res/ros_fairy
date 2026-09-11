@@ -27,7 +27,6 @@ from ros_fairy.watchdog import recorder_scan
 log = logging.getLogger("ros_fairy.watchdog")
 
 BAG_INACTIVITY_S = 30
-RCLPY_TIMEOUT_S = 5
 DOCKER_TIMEOUT_S = 10
 PIP_TIMEOUT_S = 30
 HARDWARE_CMD_TIMEOUT_S = 10
@@ -38,8 +37,9 @@ ROS_RETRY_INTERVAL_S = 60
 HEARTBEAT_S = 60
 FOREIGN_SCAN_INTERVAL_S = 5
 # Upper bound on waiting for an in-flight harvest at finalise time. The
-# pipeline's own module timeouts sum to ~205 s worst case; past this the
-# harvest is considered hung and the bag is finalised with whatever is on disk.
+# pipeline's own module timeouts sum to ~210 s worst case (including
+# ros_descriptions.RCLPY_TIMEOUT_S); past this the harvest is considered hung
+# and the bag is finalised with whatever is on disk.
 HARVEST_WAIT_S = 240
 
 STORAGE_SUFFIXES = (".db3", ".mcap")
@@ -99,8 +99,7 @@ def run_pipeline() -> dict[str, Any]:
     if status["docker_info"] == "ok" and \
             not results["docker_info"]["available"]:
         status["docker_info"] = "skipped"
-    attempt("ros_descriptions",
-            lambda: ros_descriptions.harvest(RCLPY_TIMEOUT_S))
+    attempt("ros_descriptions", ros_descriptions.harvest)
     if status["ros_descriptions"] == "ok" and \
             results["ros_descriptions"]["robot_description"] is None and \
             results["ros_descriptions"]["tf_static"] is None:

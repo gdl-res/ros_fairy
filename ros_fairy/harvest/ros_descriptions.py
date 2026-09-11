@@ -2,14 +2,22 @@
 
 This is the only harvest module allowed to use rclpy:
 both topics are transient-local latched publishers that subprocess tooling
-cannot read reliably. Hard 5-second budget; returns Nones on any problem,
+cannot read reliably. Hard timeout budget; returns Nones on any problem,
 including rclpy not being importable at all.
 """
 
 import time
 from typing import Any
 
-RCLPY_TIMEOUT_S = 5
+# A fresh rclpy Context/node/DDS participant is created on every call (see
+# harvest() below) — no pooling — so this budget has to cover DDS discovery
+# from scratch, not just message delivery once matched. 5s occasionally
+# wasn't enough for that even against a publisher that genuinely was up the
+# whole time (observed 2026-09-11: a real robot_description publisher over
+# Docker container networking timed out once, succeeded moments earlier/later
+# with the same code) — a slower discovery handshake, not a QoS/topic-name
+# mismatch, since a mismatch would fail every time, not intermittently.
+RCLPY_TIMEOUT_S = 10
 
 
 def harvest(timeout_s: float = RCLPY_TIMEOUT_S) -> dict[str, Any]:

@@ -464,9 +464,49 @@ def test_find_similar_respects_time_window(fairy_dirs):
     harvest2, context2 = _spool(fairy_dirs)
     context2["intent"]["location_name"] = "Crosslab"
     record2 = builder.build(harvest2, context2)
-    # Same place, but three days later -> outside the default 24h window.
+    # Same place, but three days later -> well outside the default window.
     record2.identity.created_at = saved.identity.created_at + timedelta(days=3)
     assert duplicates.find_similar(record2) == []
+
+
+def test_find_similar_does_not_flag_routine_same_day_revisits(fairy_dirs):
+    """Reported 2026-09-11: two genuinely separate validation missions at the
+    same lab ~20.5h apart were flagged as a possible duplicate. The window
+    guards against re-saving the *same outing* twice (a same-sitting
+    mistake), not against visiting one site more than once."""
+    from datetime import timedelta
+
+    from ros_fairy.archive import duplicates
+    harvest, context = _spool(fairy_dirs)
+    context["intent"]["location_name"] = "Crosslab"
+    saved = builder.build(harvest, context)
+    assembler.assemble(saved, harvest)
+
+    harvest2, context2 = _spool(fairy_dirs)
+    context2["intent"]["location_name"] = "Crosslab"
+    record2 = builder.build(harvest2, context2)
+    record2.identity.created_at = saved.identity.created_at + \
+        timedelta(hours=20, minutes=33)
+    assert duplicates.find_similar(record2) == []
+
+
+def test_find_similar_still_flags_within_the_new_window(fairy_dirs):
+    """The tightened window must still catch the mistake it exists for: an
+    accidental same-sitting re-save minutes later."""
+    from datetime import timedelta
+
+    from ros_fairy.archive import duplicates
+    harvest, context = _spool(fairy_dirs)
+    context["intent"]["location_name"] = "Crosslab"
+    saved = builder.build(harvest, context)
+    assembler.assemble(saved, harvest)
+
+    harvest2, context2 = _spool(fairy_dirs)
+    context2["intent"]["location_name"] = "Crosslab"
+    record2 = builder.build(harvest2, context2)
+    record2.identity.created_at = saved.identity.created_at + \
+        timedelta(minutes=20)
+    assert len(duplicates.find_similar(record2)) == 1
 
 
 def test_index_persists_data_quality(fairy_dirs):

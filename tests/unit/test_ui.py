@@ -76,6 +76,9 @@ def test_summary_is_plain_language():
     assert "Jane Doe" in out
     assert "1 recording, 42 minutes, 3.3 GB" in out
     assert "u-blox ZED-F9P" in out
+    # the Sensors list names each sensor by its registered id too, so an
+    # operator with two of the same make/model can tell them apart
+    assert "u-blox ZED-F9P (gps0)" in out
     # no jargon or raw structures
     assert "/fix" not in out
     assert "243.2" not in out

@@ -68,7 +68,7 @@ def test_full_mission_lifecycle(fairy_dirs, tmp_path, capsys):
                            return_value="save"):
         assert mission_close.run(SimpleNamespace(), console=console) == 0
     out = console.file.getvalue()
-    assert "GPS signal was lost for 4 minutes" in out
+    assert "GPS (gps0) signal was lost for 4 minutes" in out
     assert "Mission saved" in out
 
     # 5. the crate is complete and the spool is clean

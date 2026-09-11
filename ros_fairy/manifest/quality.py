@@ -54,23 +54,26 @@ def assess(record: MissionRecord, harvest: dict | None = None) -> Quality:
         major.append("This robot hasn't been set up, so there's no robot or "
                      "sensor information.")
 
+    # Sensors that produced no data at all.
+    silent = {w.sensor_id for b in bags for w in b.health_warnings
+              if w.kind == "never_published" and w.sensor_id}
+    if silent:
+        minor.append(f"{len(silent)} sensor(s) produced no data at all.")
+
     # Declared sensors the live graph confirmed absent at start. Sensors with
-    # unknown liveness (None — graph unreachable) are not counted here; ones that
-    # recorded no data are caught by the never_published check below.
+    # unknown liveness (None — graph unreachable) are not counted here. A
+    # sensor already counted as silent above isn't counted again here — it's
+    # the same underlying problem seen two ways, not two problems.
     if record.sensors:
-        not_detected = [s for s in record.sensors if s.detected_at_start is False]
+        not_detected = [s for s in record.sensors
+                        if s.detected_at_start is False
+                        and s.sensor_id not in silent]
         if not_detected and len(not_detected) == len(record.sensors):
             minor.append("None of the declared sensors were detected when "
                          "recording started.")
         elif not_detected:
             minor.append(f"{len(not_detected)} of {len(record.sensors)} "
                          "sensors weren't detected when recording started.")
-
-    # Sensors that produced no data at all.
-    silent = {w.sensor_id for b in bags for w in b.health_warnings
-              if w.kind == "never_published" and w.sensor_id}
-    if silent:
-        minor.append(f"{len(silent)} sensor(s) produced no data at all.")
 
     level = POOR if major else DEGRADED if minor else OK
     return Quality(level=level, reasons=major + minor)

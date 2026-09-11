@@ -168,7 +168,8 @@ def test_harvest_level_warnings():
     h = _harvest()
     warnings = builder.harvest_level_warnings(h)
     assert any("physical description" in w for w in warnings)
-    assert any("Ping2 didn't seem to be running" in w for w in warnings)
+    assert any("Ping2 (sonar0) didn't seem to be running" in w
+              for w in warnings)
 
     h_no_robot = _harvest()
     h_no_robot["robot"] = None
@@ -177,6 +178,22 @@ def test_harvest_level_warnings():
                for w in builder.harvest_level_warnings(h_no_robot))
 
     assert "recording assistant" in builder.harvest_level_warnings(None)[0]
+
+
+def test_harvest_level_warnings_does_not_double_report_a_silent_sensor():
+    """A sensor that was both undetected at start and never published data
+    in the bag is one fact, not two — reported 2026-09-11: 'Realsense D456
+    didn't seem to be running' and 'Camera (cam1) produced no data at all'
+    both appearing for what was the same disconnected camera."""
+    h = _harvest()
+    h["bags"] = [{**BAG, "health_warnings": [
+        {"topic": "/depth", "sensor_id": "sonar0", "kind": "never_published",
+         "start_offset_s": None, "duration_s": None,
+         "plain_text": "Sonar (sonar0) produced no data at all during this "
+                       "recording."},
+    ]}]
+    warnings = builder.harvest_level_warnings(h)
+    assert not any("didn't seem to be running" in w for w in warnings)
 
 
 def test_load_spool(fairy_dirs):

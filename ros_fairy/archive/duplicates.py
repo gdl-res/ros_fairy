@@ -18,7 +18,13 @@ from ros_fairy.utils.topic_health import humanize_duration
 # A location this close (0..1) counts as "the same place, maybe mistyped".
 # "crosslab"/"crossloab" ≈ 0.94; unrelated names fall well below.
 LOCATION_SIMILARITY = 0.85
-DEFAULT_WINDOW = timedelta(hours=24)
+# The mistake this guards against — re-briefing and re-saving the same
+# outing — happens within the same sitting (minutes, occasionally an hour).
+# Repeat missions at one place hours or days apart (routine validation runs,
+# a site revisited later) are normal and shouldn't be flagged just because
+# the date already tells them apart (reported 2026-09-11: two genuinely
+# separate missions ~20.5h apart at the same lab were flagged).
+DEFAULT_WINDOW = timedelta(hours=2)
 
 
 def _norm(text: str) -> str:

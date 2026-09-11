@@ -44,7 +44,7 @@ def test_gap_detection_plain_text(tmp_path):
     assert w["sensor_id"] == "gps0"
     assert 239 < w["duration_s"] < 241
     assert w["plain_text"] == \
-        "GPS signal was lost for 4 minutes, starting 2 minutes in."
+        "GPS (gps0) signal was lost for 4 minutes, starting 2 minutes in."
 
 
 def test_slow_topic_not_flagged(tmp_path):
@@ -66,10 +66,8 @@ def test_never_published(tmp_path):
     assert w["sensor_id"] == "sonar0"
     assert "Sonar" in w["plain_text"]
     assert "no data at all" in w["plain_text"]
-    # SENSORS has exactly one sensor of each type, so it's unambiguous —
-    # exact match guards the plain (no make/model) wording.
     assert w["plain_text"] == \
-        "Sonar produced no data at all during this recording."
+        "Sonar (sonar0) produced no data at all during this recording."
 
 
 # Same make/model on purpose — a stereo pair or front/rear pair of identical

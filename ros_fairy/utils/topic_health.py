@@ -134,25 +134,21 @@ def parse_bag_metadata(bag_dir: Path) -> dict[str, Any] | None:
     }
 
 
-def _friendly_name(sensor: dict | None, topic: str, *,
-                   ambiguous: bool = False) -> str:
+def _friendly_name(sensor: dict | None, topic: str) -> str:
     """Plain-language name for a warning's subject.
 
-    A declared sensor is normally named by its type ("Camera", "GPS", ...) —
-    friendlier than an ID for a one-of-a-kind sensor. But a robot with two
-    sensors of the same type makes that ambiguous (which camera?), and two
-    of the same make/model (common — a stereo pair, front/rear cameras) means
-    the make/model can't disambiguate them either; when ``ambiguous`` is set,
-    the operator's own ``sensor_id`` (the label they gave it at setup, e.g.
-    "cam0") is appended instead, since it's guaranteed unique per sensor.
+    Always includes the operator's own ``sensor_id`` (the label they gave it
+    at setup, e.g. "cam0") alongside the type/make — the type alone
+    ("Camera") is ambiguous the moment a robot has two of the same type, and
+    even the make/model can't disambiguate two identical units (a stereo
+    pair, front/rear cameras). sensor_id is the one thing guaranteed unique
+    per sensor, and it's how the operator already thinks of it.
     """
     if sensor is not None:
         label = _FRIENDLY_TYPE.get(sensor.get("type", ""),
                                    sensor.get("make_model") or "A sensor")
         sensor_id = sensor.get("sensor_id")
-        if ambiguous and sensor_id:
-            return f"{label} ({sensor_id})"
-        return label
+        return f"{label} ({sensor_id})" if sensor_id else label
     return f"One of the recorded data channels ({topic})"
 
 
@@ -171,8 +167,7 @@ def _compressed_variant(topic: str, recorded: dict[str, int]) -> str | None:
 
 
 def _gap_warnings(topic: str, sensor: dict | None, stamps: list[float],
-                  bag_start: float, bag_end: float, *,
-                  ambiguous: bool = False) -> list[dict]:
+                  bag_start: float, bag_end: float) -> list[dict]:
     if len(stamps) < 2:
         return []
     if sensor is None and len(stamps) < GAP_MIN_MESSAGES:
@@ -184,7 +179,7 @@ def _gap_warnings(topic: str, sensor: dict | None, stamps: list[float],
         usual = sorted(intervals)[:-1]
         burst = GAP_P95_FACTOR * statistics.quantiles(usual, n=20)[-1]
     threshold = max(GAP_THRESHOLD_S, GAP_MEDIAN_FACTOR * median, burst)
-    who = _friendly_name(sensor, topic, ambiguous=ambiguous)
+    who = _friendly_name(sensor, topic)
     what = _signal_word(sensor)
     warnings = []
     gap_durations: list[float] = []
@@ -234,8 +229,7 @@ def _gap_warnings(topic: str, sensor: dict | None, stamps: list[float],
 
 
 def _low_rate_warning(topic: str, sensor: dict | None, stamps: list[float],
-                      duration_s: float, *,
-                      ambiguous: bool = False) -> dict | None:
+                      duration_s: float) -> dict | None:
     if len(stamps) < LOW_RATE_MIN_MESSAGES or duration_s <= LOW_RATE_WINDOW_S:
         return None
     windows: dict[int, int] = {}
@@ -254,8 +248,8 @@ def _low_rate_warning(topic: str, sensor: dict | None, stamps: list[float],
         "start_offset_s": None,
         "duration_s": None,
         "plain_text": (
-            f"{_friendly_name(sensor, topic, ambiguous=ambiguous)} sent data "
-            f"much more slowly than usual for most of the recording."),
+            f"{_friendly_name(sensor, topic)} sent data much more slowly "
+            f"than usual for most of the recording."),
     }
 
 
@@ -346,16 +340,6 @@ def analyse_bag(bag_dir: Path, sensors: list[dict] | None = None, *,
     """
     sensors = sensors or []
     by_topic = {s["topic"]: s for s in sensors}
-    # A robot with two sensors of the same type (e.g. two cameras) makes the
-    # type-only friendly name ("Camera") ambiguous between them.
-    type_counts: dict[str, int] = {}
-    for s in sensors:
-        t = s.get("type", "")
-        type_counts[t] = type_counts.get(t, 0) + 1
-
-    def _ambiguous(sensor: dict | None) -> bool:
-        return sensor is not None and type_counts.get(sensor.get("type", ""), 0) > 1
-
     if meta is None:
         meta = parse_bag_metadata(bag_dir)
     warnings: list[dict] = []
@@ -372,8 +356,7 @@ def analyse_bag(bag_dir: Path, sensors: list[dict] | None = None, *,
     for sensor in sensors:
         if recorded.get(sensor["topic"], 0) > 0:
             continue
-        who = _friendly_name(sensor, sensor["topic"],
-                             ambiguous=_ambiguous(sensor))
+        who = _friendly_name(sensor, sensor["topic"])
         compressed = (_compressed_variant(sensor["topic"], recorded)
                      if sensor.get("type") == "camera" else None)
         if compressed is not None:
@@ -412,13 +395,10 @@ def analyse_bag(bag_dir: Path, sensors: list[dict] | None = None, *,
         return warnings
     for topic, stamps in series.items():
         topic_sensor = by_topic.get(topic)
-        ambiguous = _ambiguous(topic_sensor)
-        gaps = _gap_warnings(topic, topic_sensor, stamps, bag_start, bag_end,
-                             ambiguous=ambiguous)
+        gaps = _gap_warnings(topic, topic_sensor, stamps, bag_start, bag_end)
         warnings.extend(gaps)
         if not gaps:
-            low = _low_rate_warning(topic, topic_sensor, stamps, duration_s,
-                                    ambiguous=ambiguous)
+            low = _low_rate_warning(topic, topic_sensor, stamps, duration_s)
             if low:
                 warnings.append(low)
     return warnings

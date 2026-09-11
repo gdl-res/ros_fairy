@@ -63,8 +63,9 @@ def show_summary(record: MissionRecord, harvest_warnings: list[str],
         ok = sensor.detected_at_start and sensor.sensor_id not in \
             warned_sensors
         glyph, style = ("✓", "green") if ok else ("⚠", "yellow")
-        sensor_lines.append(Text(f" {glyph} {sensor.make_model}",
-                                 style=style))
+        sensor_lines.append(Text(
+            f" {glyph} {sensor.make_model} ({sensor.sensor_id})",
+            style=style))
 
     # A multi-bag mission (a foreign recording adopted mid-mission, a
     # retry, ...) commonly repeats the *identical* warning per bag — e.g.

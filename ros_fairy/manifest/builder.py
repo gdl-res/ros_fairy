@@ -270,12 +270,20 @@ def harvest_level_warnings(harvest: dict | None) -> list[str]:
         thing = "recording" if gone == 1 else "recordings"
         warnings.append(f"{gone} {thing} made earlier can no longer be found "
                         "where they were recorded, so they won't be saved.")
+    # A sensor that also recorded no data at all is flagged from bag health
+    # (topic_health's "never_published") below, with a more specific message
+    # — don't say the same thing about it twice.
+    silent_sensor_ids = {
+        w.get("sensor_id") for bag in harvest.get("bags", [])
+        for w in bag.get("health_warnings", [])
+        if w.get("kind") == "never_published" and w.get("sensor_id")}
     for sensor in harvest.get("sensors", []):
         # Only warn when the live graph actually confirmed the sensor absent.
         # ``None`` means we couldn't reach the graph to check — don't accuse a
-        # sensor of being down when a recorded bag may prove otherwise. A
-        # sensor that recorded no data at all is flagged from bag health instead.
-        if sensor.get("detected_at_start") is False:
-            warnings.append(f"{sensor['make_model']} didn't seem to be "
-                            f"running when the recording started.")
+        # sensor of being down when a recorded bag may prove otherwise.
+        if sensor.get("detected_at_start") is False and \
+                sensor.get("sensor_id") not in silent_sensor_ids:
+            warnings.append(f"{sensor['make_model']} ({sensor['sensor_id']}) "
+                            f"didn't seem to be running when the recording "
+                            f"started.")
     return warnings
