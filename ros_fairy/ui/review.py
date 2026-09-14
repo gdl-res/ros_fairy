@@ -16,6 +16,13 @@ _QUALITY_LABEL = {
     quality_mod.POOR: ("POOR — important data is missing", "red"),
 }
 
+# Beyond this many distinct topics with a "gap" warning, itemising each one
+# drowns the review (a flaky network mid-mission can drop a dozen topics at
+# once). Collapse to a single count instead — the full per-topic detail
+# still ends up in the mission record and RO-Crate metadata either way, this
+# is only about what's worth reading right now.
+GAP_SUMMARY_THRESHOLD = 3
+
 
 def human_size(size_bytes: int) -> str:
     if size_bytes >= 1e9:
@@ -75,9 +82,22 @@ def show_summary(record: MissionRecord, harvest_warnings: list[str],
     # facts; collapse to one line each (order preserved) rather than
     # drowning the review in duplicates.
     health = [w for b in record.bags for w in b.health_warnings]
-    warnings = list(dict.fromkeys(
-        harvest_warnings
-        + [w.plain_text for w in health if w.kind not in INFO_KINDS]))
+
+    # Gap warnings are collapsed per-topic already (topic_health.py); once
+    # enough *different* topics are each affected, collapse across topics
+    # too rather than printing one line per channel.
+    gap_topics = list(dict.fromkeys(w.topic for w in health if w.kind == "gap"))
+    if len(gap_topics) > GAP_SUMMARY_THRESHOLD:
+        gap_lines = [f"{len(gap_topics)} recorded channels dropped data "
+                     "during the recording — the full per-topic detail is "
+                     "saved with the mission record."]
+    else:
+        gap_lines = list(dict.fromkeys(
+            w.plain_text for w in health if w.kind == "gap"))
+    other_lines = [w.plain_text for w in health
+                   if w.kind not in INFO_KINDS and w.kind != "gap"]
+
+    warnings = list(dict.fromkeys(harvest_warnings + gap_lines + other_lines))
     notes = list(dict.fromkeys(
         w.plain_text for w in health if w.kind in INFO_KINDS))
     body: list = []

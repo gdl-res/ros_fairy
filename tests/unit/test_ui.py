@@ -199,6 +199,68 @@ def test_summary_renders_compressed_transport_as_a_note_not_a_warning():
     assert "✓ Realsense D456" in out
 
 
+def _gap_harvest_with_topics(n: int):
+    harvest = builder.compose_harvest(
+        identity={
+            "robot": {"name": "Heron-02", "platform": "Heron USV",
+                      "serial_number": "H02", "owner_organization": "Lab",
+                      "owner_contact": "a@b.c"},
+            "sensors": [], "calibrations": [], "default_license": None},
+        system={"hostname": "r1", "kernel": "Linux", "arch": "x86_64",
+                "ros_distro": "jazzy", "apt_ros_versions": {}},
+        graph={"captured_at": "2026-06-12T14:03:00+00:00", "nodes": [],
+               "topics": [], "ros_packages": [], "parameters": {},
+               "complete": True},
+        docker=None, descriptions=None,
+        harvest_status={"robot_identity": "ok", "system_info": "ok",
+                        "ros_graph": "ok", "ros_descriptions": "timeout",
+                        "docker_info": "skipped"})
+    gap_warnings = [{
+        "topic": f"/topic{i}", "sensor_id": None, "kind": "gap",
+        "start_offset_s": 1.0, "duration_s": 2.0,
+        "plain_text": f"One of the recorded data channels (/topic{i}) data "
+                      "was lost for 2 seconds, starting 1 second in.",
+    } for i in range(n)]
+    harvest["bags"] = [{
+        "path": "bags/rosbag2_0", "storage_format": "sqlite3",
+        "size_bytes": 1000, "start_time": "2026-06-12T14:03:00+00:00",
+        "end_time": "2026-06-12T14:04:00+00:00", "duration_s": 60.0,
+        "message_count": 100, "topics": [], "health_warnings": gap_warnings,
+    }]
+    context = builder.new_mission_context(
+        operator_name="Jane Doe", goal="Survey eelgrass",
+        location_name="Marsh Creek")
+    return builder.build(harvest, context), harvest
+
+
+def test_summary_collapses_many_gap_topics():
+    """More than GAP_SUMMARY_THRESHOLD distinct topics with a gap must not
+    each get their own line — one flaky network dropping a dozen topics at
+    once shouldn't drown the review in a dozen near-identical bullets."""
+    record, harvest = _gap_harvest_with_topics(5)
+    console = _console()
+    review.show_summary(record, builder.harvest_level_warnings(harvest),
+                        console=console)
+    out = console.file.getvalue()
+    assert "5 recorded channels dropped data" in out
+    assert "mission record" in out
+    assert "/topic0" not in out
+    assert "was lost for 2 seconds" not in out
+
+
+def test_summary_itemises_gap_topics_at_or_below_threshold():
+    """At or below the threshold, individual topics still get their own,
+    more specific line — collapsing only kicks in once it's actually
+    needed."""
+    record, harvest = _gap_harvest_with_topics(3)
+    console = _console()
+    review.show_summary(record, builder.harvest_level_warnings(harvest),
+                        console=console)
+    out = console.file.getvalue()
+    assert "recorded channels dropped data" not in out
+    assert out.count("was lost for 2 seconds") == 3
+
+
 def test_confirm_save_paths():
     with mock.patch.object(review.Confirm, "ask", side_effect=[True]):
         assert review.confirm_save(_console()) == "save"
