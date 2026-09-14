@@ -5,15 +5,29 @@ ros2 param dump <node>. Keeping to subprocess keeps this module portable
 across ROS 2 distros.
 """
 
+import logging
+import re
 import subprocess
-import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from datetime import datetime, timezone
 from typing import Any
 
 import yaml
 
+log = logging.getLogger("ros_fairy.harvest.ros_graph")
+
 ROS2_CLI_TIMEOUT_S = 20
 PARAM_DUMP_BUDGET_S = 60
+PARAM_DUMP_WORKERS = 8
+
+# tf2's TransformListener always spawns a bare node with this auto-generated
+# name purely to hold a /tf subscription; it never declares a parameter, so
+# `ros2 param dump` has nothing to return for it and — on every field mission
+# harvested so far — reliably burns the full per-node timeout finding that
+# out. A real robot easily has 8+ of these; dumping them serially wasted most
+# of the whole budget before any other node got a turn. Skip them outright.
+_TF_LISTENER_NODE = re.compile(r"/transform_listener_impl_[0-9a-f]+$")
 
 
 class RosGraphError(Exception):
@@ -66,24 +80,48 @@ def harvest() -> dict[str, Any]:
 
     Raises RosGraphError only if the basic listing commands fail (ROS down).
     Individual param dump failures degrade to complete=False instead.
+
+    Node param dumps run concurrently (bounded pool) against a shared
+    wall-clock deadline rather than one-at-a-time against a shared budget: a
+    single unresponsive node used to burn its full timeout and starve every
+    node sorted after it out of even one attempt, regardless of how quickly
+    they would have answered. Running them in parallel means a slow node
+    only costs its own slot, not everyone else's turn.
     """
     nodes = list_nodes()
     topics = list_topics()
     packages = list_packages()
 
+    dumpable = [n for n in nodes if not _TF_LISTENER_NODE.search(n)]
+    skipped = len(nodes) - len(dumpable)
+    if skipped:
+        log.debug("skipping %d tf2 transform_listener_impl node(s)", skipped)
+
     parameters: dict[str, dict] = {}
     complete = True
-    deadline = time.monotonic() + PARAM_DUMP_BUDGET_S
-    for node in nodes:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            complete = False
-            break
-        try:
-            parameters[node] = dump_params(
-                node, timeout=min(ROS2_CLI_TIMEOUT_S, remaining))
-        except RosGraphError:
-            complete = False
+
+    # Not a `with` block on purpose: on the timeout path below we need
+    # shutdown(wait=False) so returning doesn't block on nodes still stuck
+    # in their own subprocess timeout — `Executor.__exit__` always calls
+    # shutdown(wait=True), which would undo that.
+    pool = ThreadPoolExecutor(max_workers=PARAM_DUMP_WORKERS)
+    futures = {pool.submit(dump_params, node): node for node in dumpable}
+    try:
+        for future in as_completed(futures, timeout=PARAM_DUMP_BUDGET_S):
+            node = futures[future]
+            try:
+                parameters[node] = future.result()
+            except RosGraphError as exc:
+                complete = False
+                log.debug("param dump failed for %s: %s", node, exc)
+        pool.shutdown(wait=True)
+    except FuturesTimeoutError:
+        complete = False
+        still_running = [n for f, n in futures.items() if not f.done()]
+        log.debug("param dump budget (%ds) exhausted with %d node(s) "
+                  "still outstanding: %s", PARAM_DUMP_BUDGET_S,
+                  len(still_running), ", ".join(still_running))
+        pool.shutdown(wait=False, cancel_futures=True)
 
     return {
         "captured_at": datetime.now(timezone.utc).isoformat(),

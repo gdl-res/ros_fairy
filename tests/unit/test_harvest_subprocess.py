@@ -2,6 +2,7 @@
 
 import json
 import subprocess
+import time
 from unittest import mock
 
 import pytest
@@ -63,6 +64,56 @@ def test_ros_graph_timeout():
                     side_effect=subprocess.TimeoutExpired("ros2", 20)):
         with pytest.raises(RosGraphError, match="timed out"):
             ros_graph.list_nodes()
+
+
+def test_ros_graph_skips_tf_listener_nodes():
+    # tf2's TransformListener never declares parameters; dumping it wastes
+    # a timeout for nothing, so it should never even be attempted.
+    nodes_out = "/navsat\n/transform_listener_impl_5c1d50edeb00\n"
+    dumped = []
+
+    def fake_run(cmd, **kw):
+        if cmd[1] == "param":
+            dumped.append(cmd[3])
+            return _completed(PARAM_DUMP)
+        return _completed({"node": nodes_out, "topic": TOPIC_LIST,
+                           "pkg": PKG_LIST}[cmd[1]])
+
+    with mock.patch("subprocess.run", side_effect=fake_run):
+        data = ros_graph.harvest()
+
+    assert data["nodes"] == [
+        "/navsat", "/transform_listener_impl_5c1d50edeb00"]
+    assert dumped == ["/navsat"]
+    assert data["complete"] is True
+
+
+def test_ros_graph_slow_node_does_not_starve_others(monkeypatch):
+    # Regression test: param dumps used to run one at a time against a
+    # shared budget, so one unresponsive node (sorted first, here) used to
+    # exhaust the whole budget and leave every node sorted after it
+    # unattempted. They now run concurrently, so a slow node only costs its
+    # own slot.
+    monkeypatch.setattr(ros_graph, "PARAM_DUMP_BUDGET_S", 0.3)
+    nodes_out = "/aaa_slow\n/zzz_fast\n"
+
+    def fake_run(cmd, **kw):
+        if cmd[1] == "param":
+            if cmd[3] == "/aaa_slow":
+                time.sleep(1.0)
+            return _completed(PARAM_DUMP)
+        return _completed({"node": nodes_out, "topic": TOPIC_LIST,
+                           "pkg": PKG_LIST}[cmd[1]])
+
+    with mock.patch("subprocess.run", side_effect=fake_run):
+        started = time.monotonic()
+        data = ros_graph.harvest()
+        elapsed = time.monotonic() - started
+
+    assert data["complete"] is False
+    assert "/zzz_fast" in data["parameters"]
+    assert "/aaa_slow" not in data["parameters"]
+    assert elapsed < 1.0  # didn't block on the slow node to return
 
 
 # --- docker_info -------------------------------------------------------------
