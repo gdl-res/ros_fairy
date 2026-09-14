@@ -306,7 +306,11 @@ def test_list_shows_missions(fairy_dirs):
     from ros_fairy.archive import assembler
     assembler.assemble(record, harvest)
 
-    console = _console()
+    # Wide enough that the added Mission ID column (fixed-width, no_wrap)
+    # doesn't force the free-text columns to wrap across lines — a real
+    # terminal narrow enough to do that would wrap them regardless of this
+    # column, same as it always could with a long goal/location/operator.
+    console = Console(file=io.StringIO(), width=160, force_terminal=False)
     args = SimpleNamespace(operator=None, location=None, since=None,
                            until=None, limit=20, path=False)
     assert list_missions.run(args, console=console) == 0
@@ -314,6 +318,7 @@ def test_list_shows_missions(fairy_dirs):
     assert "Jane Doe" in out
     assert "Survey eelgrass beds" in out
     assert "10 minutes" in out
+    assert record.identity.mission_id in out
 
     console = _console()
     args.operator = "nobody"

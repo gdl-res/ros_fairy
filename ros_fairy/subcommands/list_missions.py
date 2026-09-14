@@ -69,6 +69,11 @@ def run(args, console: Console | None = None) -> int:
     show_path = getattr(args, "path", False)
     table = Table(border_style="dim")
     table.add_column("Date")
+    # Fixed-width ("m-YYYYMMDD-HHMMSS-xxxx"), no_wrap so it's always copyable
+    # as one contiguous string — this is the identifier `ros2 fairy export`,
+    # `verify` and `diff` accept, so an operator can paste it straight from
+    # here instead of hunting through archive paths.
+    table.add_column("Mission ID", no_wrap=True, style="dim")
     table.add_column("Mission")
     table.add_column("Location")
     table.add_column("Operator")
@@ -84,6 +89,7 @@ def run(args, console: Console | None = None) -> int:
             goal = goal[:39] + "…"
         cells = [
             _fmt_date(row["created_at"]),
+            row["mission_id"],
             goal,
             row["location"],
             row["operator"],
