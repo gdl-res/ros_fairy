@@ -55,6 +55,11 @@ class DockerContainer(_Model):
     digest: str | None = None
     compose_project: str | None = None
     compose_file: str | None = None
+    # `ros2 pkg list` exec'd into this container, if it was running and the
+    # probe succeeded. None means "couldn't tell" (not running, no ROS
+    # found, or the probe failed) — distinct from Software.ros_packages,
+    # which only ever reflects the host (see harvest/ros_graph.py).
+    ros_packages: list[str] | None = None
 
 
 class PythonPackage(_Model):

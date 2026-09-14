@@ -165,6 +165,97 @@ def test_docker_no_containers():
     assert data["docker_containers"] == []
 
 
+RUNNING_INSPECT = [{
+    "Id": "c0ffee",
+    "Name": "/navstack",
+    "State": {"Running": True},
+    "Config": {
+        "Image": "example/navstack:1.4.2",
+        "Labels": {
+            "com.docker.compose.project": "robot",
+            "com.docker.compose.project.config_files": "/opt/robot/compose.yml",
+        },
+    },
+}]
+
+
+def test_docker_probes_running_container_for_ros_packages():
+    """A robot whose ROS stack lives entirely in a container (nothing on
+    the host) should still get a real package list — probed inside the
+    container, not the host's mostly-empty one."""
+    def fake_run(cmd, **kw):
+        if cmd[1] == "ps":
+            return _completed("c0ffee\n")
+        if cmd[1] == "exec":
+            assert cmd[2] == "c0ffee"
+            assert cmd[3:] == ["ros2", "pkg", "list"]
+            return _completed("nav2_bringup\nnav2_msgs\n")
+        if "--format" in cmd:
+            return _completed('["example/navstack@sha256:7be1"]')
+        return _completed(json.dumps(RUNNING_INSPECT))
+
+    with mock.patch("subprocess.run", side_effect=fake_run):
+        data = docker_info.harvest()
+
+    assert data["docker_containers"][0]["ros_packages"] == [
+        "nav2_bringup", "nav2_msgs"]
+
+
+def test_docker_falls_back_to_interactive_shell_for_ros_packages():
+    """Many hand-rolled robot images only source ROS from ~/.bashrc, so a
+    bare `docker exec ... ros2 pkg list` finds nothing — fall back to a
+    login+interactive shell, same as an operator attaching manually would
+    get."""
+    def fake_run(cmd, **kw):
+        if cmd[1] == "ps":
+            return _completed("c0ffee\n")
+        if cmd[1] == "exec":
+            if "bash" in cmd:
+                assert cmd[-1] == "ros2 pkg list"
+                return _completed("nav2_bringup\n")
+            return _completed("", returncode=127, stderr="ros2: not found")
+        if "--format" in cmd:
+            return _completed('["example/navstack@sha256:7be1"]')
+        return _completed(json.dumps(RUNNING_INSPECT))
+
+    with mock.patch("subprocess.run", side_effect=fake_run):
+        data = docker_info.harvest()
+
+    assert data["docker_containers"][0]["ros_packages"] == ["nav2_bringup"]
+
+
+def test_docker_ros_packages_none_when_container_has_no_ros():
+    def fake_run(cmd, **kw):
+        if cmd[1] == "ps":
+            return _completed("c0ffee\n")
+        if cmd[1] == "exec":
+            return _completed("", returncode=127, stderr="not found")
+        if "--format" in cmd:
+            return _completed('["example/navstack@sha256:7be1"]')
+        return _completed(json.dumps(RUNNING_INSPECT))
+
+    with mock.patch("subprocess.run", side_effect=fake_run):
+        data = docker_info.harvest()
+
+    assert data["docker_containers"][0]["ros_packages"] is None
+
+
+def test_docker_does_not_exec_into_a_stopped_container():
+    def fake_run(cmd, **kw):
+        if cmd[1] == "ps":
+            return _completed("c0ffee\n")
+        if cmd[1] == "exec":
+            raise AssertionError("must not exec into a stopped container")
+        if "--format" in cmd:
+            return _completed('["example/navstack@sha256:7be1"]')
+        return _completed(json.dumps(INSPECT))  # no "State" key at all
+
+    with mock.patch("subprocess.run", side_effect=fake_run):
+        data = docker_info.harvest()
+
+    assert data["docker_containers"][0]["ros_packages"] is None
+
+
 # --- system_info -------------------------------------------------------------
 
 def test_system_info(monkeypatch):
