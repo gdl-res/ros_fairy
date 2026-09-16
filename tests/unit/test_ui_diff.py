@@ -1,8 +1,8 @@
 """Rendering tests for ui/diff.py (the rich table view of ros2 fairy diff).
 
 The --json path is covered in test_subcommands; these exercise the rendered
-sections, the added/removed/changed row convention, the graph-row cap, and
-the no-differences case.
+sections, the added/removed/changed row convention, and the no-differences
+case.
 """
 
 import copy
@@ -67,14 +67,29 @@ def test_software_and_graph_changes_rendered(fairy_dirs):
     assert "kilted" in out
 
 
-def test_graph_rows_capped_with_overflow_line(fairy_dirs):
+def test_all_graph_changes_shown_without_cap(fairy_dirs):
     def mutate(h, c):
         h["ros_graph"]["nodes"] = [f"/extra_{i:02d}" for i in range(30)]
 
     a, b = _pair(fairy_dirs, mutate)
     out = _render(a, b)
-    assert "more change" in out
-    assert "/extra_29" not in out       # beyond the cap
+    assert "more change" not in out
+    assert "/extra_00" in out
+    assert "/extra_29" in out           # would have been beyond the old cap
+
+
+def test_random_id_nodes_ignored_in_graph_diff(fairy_dirs):
+    def mutate(h, c):
+        h["ros_graph"]["nodes"] = h["ros_graph"]["nodes"] + [
+            "/transform_listener_impl_565e5a3dba30",
+            "/visodom/transform_listener_impl_6512734d39b0",
+        ]
+
+    a, b = _pair(fairy_dirs, mutate)
+    out = _render(a, b)
+    # only the noisy, random-id nodes differ — nothing worth reporting
+    assert "No differences found." in out
+    assert "transform_listener_impl" not in out
 
 
 def test_recording_changes_rendered(fairy_dirs):
@@ -92,7 +107,50 @@ def test_recording_changes_rendered(fairy_dirs):
     out = _render(a, b)
     assert "Recordings" in out
     assert "Duration" in out
-    assert "GPS signal was lost" in out
+    assert "Warnings" in out
+    # counts only — the warning text itself is too noisy for a diff
+    assert "GPS signal was lost" not in out
+
+
+def test_host_package_changes_rendered(fairy_dirs):
+    def mutate(h, c):
+        h["software"]["ros_packages"] = ["rclpy", "nav2_core"]
+
+    a, b = _pair(fairy_dirs, mutate)
+    out = _render(a, b)
+    assert "Software" in out
+    assert "nav2_core" in out
+    assert "rclpy" not in out           # unchanged, so not shown
+
+
+def test_docker_package_changes_rendered(fairy_dirs):
+    def mutate(h, c):
+        h["software"]["docker_containers"][0]["ros_packages"] = [
+            "nav2_bringup", "rclpy"]
+
+    a, b = _pair(fairy_dirs, mutate)
+    out = _render(a, b)
+    assert "Software" in out
+    assert "navstack: pkg nav2_bringup" in out
+    assert "navstack: pkg rclpy" in out
+
+
+def test_parameter_changes_rendered(fairy_dirs):
+    h1, c1 = _spool(fairy_dirs)
+    h1["ros_graph"]["parameters"] = {
+        "/navsat": {"/navsat": {"ros__parameters": {"rate": 5.0}}}}
+    a = builder.build(h1, c1)
+
+    h2, c2 = copy.deepcopy(h1), copy.deepcopy(c1)
+    h2["ros_graph"]["parameters"] = {
+        "/navsat": {"/navsat": {"ros__parameters": {"rate": 10.0}}}}
+    b = builder.build(h2, c2)
+
+    out = _render(a, b)
+    assert "Parameters" in out
+    assert "/navsat rate" in out
+    assert "5.0" in out
+    assert "10.0" in out
 
 
 def test_diff_as_dict_only_contains_changed_sections(fairy_dirs):

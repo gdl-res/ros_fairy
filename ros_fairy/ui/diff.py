@@ -4,6 +4,8 @@ Compares two MissionRecord objects section by section, printing only what
 actually changed. Sections with no differences are silently omitted.
 """
 
+import re
+
 from rich.console import Console, Group
 from rich.panel import Panel
 from rich.rule import Rule
@@ -14,7 +16,11 @@ from ros_fairy.manifest.schema import MissionRecord
 from ros_fairy.ui.review import human_size
 from ros_fairy.utils.topic_health import humanize_duration
 
-_MAX_GRAPH_ROWS = 20
+# ROS-internal nodes get a random-id suffix baked into their name (tf2's
+# TransformListener is the classic case: /transform_listener_impl_565e5a3d…),
+# so every mission has a different set purely by chance — they're noise in a
+# diff, not a real change. Match anything ending in a long hex run.
+_RANDOM_ID_NODE = re.compile(r"_[0-9a-f]{8,}$", re.IGNORECASE)
 
 
 def _mission_label(r: MissionRecord) -> str:
@@ -75,6 +81,12 @@ def _diff_software(a: MissionRecord, b: MissionRecord) -> list[tuple]:
         if va != vb:
             rows.append((pkg, va or "", vb or ""))
 
+    pkgs_a, pkgs_b = set(a.software.ros_packages), set(b.software.ros_packages)
+    for pkg in sorted(pkgs_a - pkgs_b):
+        rows.append((f"host pkg {pkg}", "installed", ""))
+    for pkg in sorted(pkgs_b - pkgs_a):
+        rows.append((f"host pkg {pkg}", "", "installed"))
+
     ca = {c.name: c for c in a.software.docker_containers}
     cb = {c.name: c for c in b.software.docker_containers}
     for name in sorted(set(ca) | set(cb)):
@@ -83,6 +95,13 @@ def _diff_software(a: MissionRecord, b: MissionRecord) -> list[tuple]:
         if ia != ib:
             def _short(s): return s[:48] + "…" if s and len(s) > 48 else (s or "")
             rows.append((f"container {name}", _short(ia), _short(ib)))
+
+        pa = set(ca[name].ros_packages or []) if name in ca else set()
+        pb = set(cb[name].ros_packages or []) if name in cb else set()
+        for pkg in sorted(pa - pb):
+            rows.append((f"{name}: pkg {pkg}", "installed", ""))
+        for pkg in sorted(pb - pa):
+            rows.append((f"{name}: pkg {pkg}", "", "installed"))
 
     return rows
 
@@ -110,7 +129,8 @@ def _diff_sensors(a: MissionRecord, b: MissionRecord) -> list[tuple]:
 def _diff_graph(a: MissionRecord, b: MissionRecord) -> list[tuple]:
     rows: list[tuple] = []
 
-    nodes_a, nodes_b = set(a.ros_graph.nodes), set(b.ros_graph.nodes)
+    nodes_a = {n for n in a.ros_graph.nodes if not _RANDOM_ID_NODE.search(n)}
+    nodes_b = {n for n in b.ros_graph.nodes if not _RANDOM_ID_NODE.search(n)}
     for n in sorted(nodes_a - nodes_b):
         rows.append((n, "running", ""))
     for n in sorted(nodes_b - nodes_a):
@@ -123,11 +143,38 @@ def _diff_graph(a: MissionRecord, b: MissionRecord) -> list[tuple]:
     for t in sorted(topics_b - topics_a):
         rows.append((t, "", "published"))
 
-    if len(rows) > _MAX_GRAPH_ROWS:
-        overflow = len(rows) - _MAX_GRAPH_ROWS
-        rows = rows[:_MAX_GRAPH_ROWS]
-        rows.append((f"… and {overflow} more change{'s' if overflow != 1 else ''}",
-                     "", ""))
+    return rows
+
+
+def _flatten_params(parameters: dict[str, dict]) -> dict[str, dict]:
+    """node -> {param_name: value}, unwrapping the `ros2 param dump` envelope.
+
+    Raw shape is {node: {node: {"ros__parameters": {name: value}}}} — the
+    inner node key just mirrors the outer one (that's the YAML `ros2 param
+    dump <node>` emits).
+    """
+    flat: dict[str, dict] = {}
+    for node, doc in parameters.items():
+        if _RANDOM_ID_NODE.search(node) or not isinstance(doc, dict):
+            continue
+        inner = doc.get(node, doc)
+        params = inner.get("ros__parameters", {}) if isinstance(inner, dict) else {}
+        flat[node] = params if isinstance(params, dict) else {}
+    return flat
+
+
+def _diff_parameters(a: MissionRecord, b: MissionRecord) -> list[tuple]:
+    rows: list[tuple] = []
+    flat_a = _flatten_params(a.ros_graph.parameters)
+    flat_b = _flatten_params(b.ros_graph.parameters)
+    for node in sorted(set(flat_a) & set(flat_b)):
+        pa, pb = flat_a[node], flat_b[node]
+        for key in sorted(set(pa) | set(pb)):
+            va, vb = pa.get(key), pb.get(key)
+            if va != vb:
+                rows.append((f"{node} {key}",
+                             str(va) if key in pa else "",
+                             str(vb) if key in pb else ""))
     return rows
 
 
@@ -144,18 +191,12 @@ def _diff_recordings(a: MissionRecord, b: MissionRecord) -> list[tuple]:
     if size_a != size_b:
         rows.append(("Size", human_size(size_a), human_size(size_b)))
 
-    warns_a = {w.plain_text for bag in a.bags for w in bag.health_warnings}
-    warns_b = {w.plain_text for bag in b.bags for w in bag.health_warnings}
     total_a = sum(len(bag.health_warnings) for bag in a.bags)
     total_b = sum(len(bag.health_warnings) for bag in b.bags)
     if total_a != total_b:
         rows.append(("Warnings",
                      str(total_a) if total_a else "none",
                      str(total_b) if total_b else "none"))
-    for text in sorted(warns_b - warns_a):
-        rows.append(("", "", text))
-    for text in sorted(warns_a - warns_b):
-        rows.append(("", text, ""))
 
     return rows
 
@@ -177,6 +218,7 @@ def show_diff(a: MissionRecord, b: MissionRecord,
         ("Software",        _diff_software(a, b)),
         ("Sensors",         _diff_sensors(a, b)),
         ("ROS graph",       _diff_graph(a, b)),
+        ("Parameters",      _diff_parameters(a, b)),
         ("Recordings",      _diff_recordings(a, b)),
     ]
     changed = [(title, rows) for title, rows in sections if rows]
@@ -217,6 +259,7 @@ def diff_as_dict(a: MissionRecord, b: MissionRecord) -> dict:
         "software":        _diff_software(a, b),
         "sensors":         _diff_sensors(a, b),
         "ros_graph":       _diff_graph(a, b),
+        "parameters":      _diff_parameters(a, b),
         "recordings":      _diff_recordings(a, b),
     }
     changes = {
