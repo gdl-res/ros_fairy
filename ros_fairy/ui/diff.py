@@ -96,12 +96,23 @@ def _diff_software(a: MissionRecord, b: MissionRecord) -> list[tuple]:
             def _short(s): return s[:48] + "…" if s and len(s) > 48 else (s or "")
             rows.append((f"container {name}", _short(ia), _short(ib)))
 
-        pa = set(ca[name].ros_packages or []) if name in ca else set()
-        pb = set(cb[name].ros_packages or []) if name in cb else set()
-        for pkg in sorted(pa - pb):
-            rows.append((f"{name}: pkg {pkg}", "installed", ""))
-        for pkg in sorted(pb - pa):
-            rows.append((f"{name}: pkg {pkg}", "", "installed"))
+        # ros_packages is None when the probe never ran (container down, no
+        # ROS found, or — for old records — the harvest predates package
+        # capture entirely). That's "unknown", not "empty": diffing it
+        # against a populated list would report every package as newly
+        # installed, which is just a gap in one snapshot, not a real change.
+        ra = ca[name].ros_packages if name in ca else None
+        rb = cb[name].ros_packages if name in cb else None
+        if ra is not None and rb is not None:
+            pa, pb = set(ra), set(rb)
+            for pkg in sorted(pa - pb):
+                rows.append((f"{name}: pkg {pkg}", "installed", ""))
+            for pkg in sorted(pb - pa):
+                rows.append((f"{name}: pkg {pkg}", "", "installed"))
+        elif (ra is None) != (rb is None):
+            rows.append((f"{name}: packages captured",
+                         "no" if ra is None else "yes",
+                         "no" if rb is None else "yes"))
 
     return rows
 

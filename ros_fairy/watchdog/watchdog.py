@@ -95,6 +95,8 @@ def run_pipeline() -> dict[str, Any]:
             (results["hardware_devices"] or {}).get("status", "ok")
 
     attempt("ros_graph", ros_graph.harvest)
+    if status["ros_graph"] == "ok" and not results["ros_graph"]["complete"]:
+        status["ros_graph"] = "partial"
     attempt("docker_info", docker_info.harvest)
     if status["docker_info"] == "ok" and \
             not results["docker_info"]["available"]:
@@ -611,16 +613,41 @@ def read_state() -> dict | None:
         return None
 
 
-def ensure_ros_log_dir() -> None:
-    """Give ROS a logging directory when the service has no $HOME.
+def _writable_dir(path: Path) -> bool:
+    """True if `path` exists (or can be created) and this process can write
+    into it — a plain presence/permission-bits check isn't enough, since the
+    watchdog (usually root) may not own the directory."""
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / ".ros_fairy_write_check"
+        probe.touch()
+        probe.unlink()
+        return True
+    except OSError:
+        return False
 
-    Under systemd there is no HOME, so rcl logging can't expand ~/.ros/log and
-    node creation fails — which silently broke `ros2 param dump` (empty
-    parameters, complete=false) and the rclpy /robot_description capture,
-    while the plain listing commands kept working. Applies to this process
-    (rclpy) and every harvest subprocess via the inherited environment.
+
+def ensure_ros_log_dir() -> None:
+    """Give ROS a logging directory it can actually write to.
+
+    rcl logging expands ~/.ros/log unless ROS_LOG_DIR is set. Under plain
+    systemd there is no $HOME at all, but a customized unit or init system
+    can still hand the watchdog a $HOME it inherited from somewhere else —
+    typically not writable by whatever user the watchdog (usually root)
+    actually runs as. Either way, rcl logging then fails to create its log
+    dir and node creation silently breaks — which is what broke `ros2 param
+    dump` (empty parameters, complete=false) and the rclpy
+    /robot_description capture before, while the plain listing commands,
+    which never create a node, kept working. Trusting $HOME's mere presence
+    reintroduces the same failure the moment $HOME is set-but-unusable, so
+    this checks it actually works before relying on it. Applies to this
+    process (rclpy) and every harvest subprocess via the inherited
+    environment.
     """
-    if os.environ.get("ROS_LOG_DIR") or os.environ.get("HOME"):
+    if os.environ.get("ROS_LOG_DIR"):
+        return
+    home = os.environ.get("HOME")
+    if home and _writable_dir(Path(home) / ".ros" / "log"):
         return
     log_dir = paths.ros_log_dir()
     try:

@@ -124,15 +124,33 @@ def test_host_package_changes_rendered(fairy_dirs):
 
 
 def test_docker_package_changes_rendered(fairy_dirs):
-    def mutate(h, c):
-        h["software"]["docker_containers"][0]["ros_packages"] = [
-            "nav2_bringup", "rclpy"]
+    h1, c1 = _spool(fairy_dirs)
+    h1["software"]["docker_containers"][0]["ros_packages"] = ["rclpy"]
+    a = builder.build(h1, c1)
 
-    a, b = _pair(fairy_dirs, mutate)
+    h2, c2 = copy.deepcopy(h1), copy.deepcopy(c1)
+    h2["software"]["docker_containers"][0]["ros_packages"] = [
+        "nav2_bringup", "rclpy"]
+    b = builder.build(h2, c2)
+
     out = _render(a, b)
     assert "Software" in out
     assert "navstack: pkg nav2_bringup" in out
-    assert "navstack: pkg rclpy" in out
+    assert "navstack: pkg rclpy" not in out  # unchanged, so not shown
+
+
+def test_docker_package_not_captured_does_not_show_fake_removals(fairy_dirs):
+    """ros_packages is None (not [] ) when the probe never ran — e.g. an old
+    record from before package capture existed. That must not be reported
+    as every package having been uninstalled."""
+    def mutate(h, c):
+        h["software"]["docker_containers"][0]["ros_packages"] = [
+            f"pkg_{i}" for i in range(20)]
+
+    a, b = _pair(fairy_dirs, mutate)
+    out = _render(b, a)  # b has packages captured, a (rendered as "B") does not
+    assert "pkg_0" not in out
+    assert "packages captured" in out
 
 
 def test_parameter_changes_rendered(fairy_dirs):

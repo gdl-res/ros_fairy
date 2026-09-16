@@ -422,13 +422,74 @@ def test_ensure_ros_log_dir_when_home_missing(fairy_dirs, monkeypatch):
     assert paths.ros_log_dir().is_dir()
 
 
-def test_ensure_ros_log_dir_respects_existing_env(fairy_dirs, monkeypatch):
-    monkeypatch.setenv("HOME", "/home/someone")
+def test_ensure_ros_log_dir_respects_writable_home(fairy_dirs, monkeypatch,
+                                                    tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.delenv("ROS_LOG_DIR", raising=False)
     wd_mod.ensure_ros_log_dir()
     assert "ROS_LOG_DIR" not in wd_mod.os.environ
+    assert (tmp_path / ".ros" / "log").is_dir()
 
+
+def test_ensure_ros_log_dir_respects_existing_ros_log_dir(fairy_dirs, monkeypatch):
     monkeypatch.delenv("HOME", raising=False)
     monkeypatch.setenv("ROS_LOG_DIR", "/somewhere/else")
     wd_mod.ensure_ros_log_dir()
     assert wd_mod.os.environ["ROS_LOG_DIR"] == "/somewhere/else"
+
+
+def test_ensure_ros_log_dir_falls_back_when_home_unwritable(fairy_dirs,
+                                                             monkeypatch,
+                                                             tmp_path):
+    # A $HOME that's *set* but not writable by this process — root writing
+    # into an operator's home directory, say — must not be trusted blindly:
+    # that silently broke `ros2 param dump` the same way a missing $HOME did.
+    # Using a file (not a directory) as the HOME component forces the
+    # ~/.ros/log mkdir to fail deterministically, regardless of privilege.
+    not_a_dir = tmp_path / "home_is_actually_a_file"
+    not_a_dir.write_text("x")
+    monkeypatch.setenv("HOME", str(not_a_dir))
+    monkeypatch.delenv("ROS_LOG_DIR", raising=False)
+    wd_mod.ensure_ros_log_dir()
+    assert wd_mod.os.environ["ROS_LOG_DIR"] == str(paths.ros_log_dir())
+
+
+def test_run_pipeline_marks_ros_graph_partial_when_incomplete(fairy_dirs,
+                                                               monkeypatch):
+    """ros_graph.harvest() doesn't raise when only the parameter dump timed
+    out — it returns complete=False instead. run_pipeline must not report
+    that as a plain "ok", or the gap becomes invisible everywhere that reads
+    harvest_status (status display, doctor, diff)."""
+    from ros_fairy.harvest import (
+        docker_info,
+        hardware_devices,
+        python_env,
+        robot_identity,
+        ros_descriptions,
+        ros_graph,
+        system_info,
+    )
+
+    monkeypatch.setattr(robot_identity, "harvest", lambda: {
+        "robot": None, "sensors": [], "calibrations": [],
+        "default_license": None})
+    monkeypatch.setattr(system_info, "harvest", lambda: {
+        "hostname": "r1", "kernel": "Linux", "arch": "x86_64",
+        "ros_distro": "jazzy", "apt_ros_versions": {},
+        "clock_synchronized": True})
+    monkeypatch.setattr(python_env, "harvest", lambda: {
+        "python_env": None, "pip_freeze": None, "pip_list_json": None,
+        "status": "ok"})
+    monkeypatch.setattr(hardware_devices, "harvest", lambda: {
+        "devices": [], "lsusb_verbose": None, "dmesg_usb": None,
+        "status": "ok"})
+    monkeypatch.setattr(ros_graph, "harvest", lambda: {
+        "captured_at": None, "nodes": ["/n"], "topics": [],
+        "ros_packages": [], "parameters": {}, "complete": False})
+    monkeypatch.setattr(docker_info, "harvest", lambda: {
+        "docker_containers": [], "raw_inspect": [], "available": False})
+    monkeypatch.setattr(ros_descriptions, "harvest", lambda: {
+        "robot_description": "<robot/>", "tf_static": []})
+
+    doc = wd_mod.run_pipeline()
+    assert doc["provenance"]["harvest_status"]["ros_graph"] == "partial"

@@ -161,6 +161,10 @@ def _check_service_harvest() -> dict:
     if graph == "ok":
         return {"status": OK, "title": "Background service can reach ROS",
                 "detail": "last graph harvest succeeded", "hint": ""}
+    if graph == "partial":
+        return {"status": WARN, "title": "Background service can reach ROS",
+                "detail": "graph harvest succeeded, but parameter capture "
+                          "timed out for some nodes", "hint": ""}
     return {"status": FAIL,
             "title": "Background service cannot reach ROS",
             "detail": f"last graph harvest: {graph}",

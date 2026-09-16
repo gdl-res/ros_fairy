@@ -19,7 +19,16 @@ log = logging.getLogger("ros_fairy.harvest.ros_graph")
 
 ROS2_CLI_TIMEOUT_S = 20
 PARAM_DUMP_BUDGET_S = 60
-PARAM_DUMP_WORKERS = 8
+# Each `ros2 param dump <node>` call is its own subprocess, which creates its
+# own fresh DDS participant (no daemon/pooling for live parameter service
+# calls). On a real robot's graph — already dozens of long-lived participants
+# — piling on 8 more at once turned out to be enough to exhaust CycloneDDS's
+# automatic participant-index range: every dump call then fails to even
+# create its node ("Failed to find a free participant index for domain 0"),
+# which looks identical to every one of them hanging out the full per-call
+# timeout. Keep this low so the harvest's own footprint stays small relative
+# to the graph it's inspecting.
+PARAM_DUMP_WORKERS = 2
 
 # tf2's TransformListener always spawns a bare node with this auto-generated
 # name purely to hold a /tf subscription; it never declares a parameter, so

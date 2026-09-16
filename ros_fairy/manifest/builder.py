@@ -88,7 +88,9 @@ def compose_harvest(identity: dict | None, system: dict | None,
     # unknown (None) rather than falsely claiming every sensor was absent
     # (recorded bags later upgrade this; see reconcile_sensor_detection).
     sensors = []
-    graph_reachable = harvest_status.get("ros_graph") == "ok"
+    # "partial" means the graph itself (nodes/topics) was reachable and only
+    # the per-node parameter dump timed out — live_topics is still trustworthy.
+    graph_reachable = harvest_status.get("ros_graph") in ("ok", "partial")
     live_topics = {t["name"] for t in graph.get("topics", [])}
     for sensor in identity.get("sensors", []):
         detected = sensor["topic"] in live_topics if graph_reachable else None
