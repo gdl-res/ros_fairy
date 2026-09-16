@@ -166,9 +166,41 @@ def test_parameter_changes_rendered(fairy_dirs):
 
     out = _render(a, b)
     assert "Parameters" in out
-    assert "/navsat rate" in out
+    assert "/navsat: rate" in out
     assert "5.0" in out
     assert "10.0" in out
+
+
+def test_nested_parameter_diff_shows_only_the_changed_leaf(fairy_dirs):
+    """A nav2-style plugin param is one whole nested dict in the raw dump;
+    the diff must drill down to the single leaf that changed rather than
+    dumping the entire nested structure for both sides."""
+    unchanged_scan = {
+        "max_obstacle_height": 2.0, "min_obstacle_height": 0.15,
+        "raytrace_max_range": 10.0,
+    }
+    h1, c1 = _spool(fairy_dirs)
+    h1["ros_graph"]["parameters"] = {
+        "/global_costmap": {"/global_costmap": {"ros__parameters": {
+            "obstacle_layer": {"enabled": True, "scan": dict(unchanged_scan)}
+        }}}}
+    a = builder.build(h1, c1)
+
+    h2, c2 = copy.deepcopy(h1), copy.deepcopy(c1)
+    changed_scan = dict(unchanged_scan, raytrace_max_range=10.1)
+    h2["ros_graph"]["parameters"] = {
+        "/global_costmap": {"/global_costmap": {"ros__parameters": {
+            "obstacle_layer": {"enabled": True, "scan": changed_scan}
+        }}}}
+    b = builder.build(h2, c2)
+
+    out = _render(a, b)
+    assert "/global_costmap: obstacle_layer.scan.raytrace_max_range" in out
+    assert "10.0" in out
+    assert "10.1" in out
+    # the untouched leaves must not be dumped alongside the real change
+    assert "max_obstacle_height" not in out
+    assert "enabled" not in out
 
 
 def test_diff_as_dict_only_contains_changed_sections(fairy_dirs):

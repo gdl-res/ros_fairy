@@ -174,18 +174,32 @@ def _flatten_params(parameters: dict[str, dict]) -> dict[str, dict]:
     return flat
 
 
+def _leaves(prefix: str, value) -> list[tuple[str, object]]:
+    """Recurse through nested parameter namespaces to (dotted.path, value)
+    pairs — a nav2-style plugin param is a whole nested dict, and diffing it
+    as one opaque value dumps the entire thing the moment any one field
+    inside it changes."""
+    if isinstance(value, dict):
+        out = []
+        for key, sub in value.items():
+            out.extend(_leaves(f"{prefix}.{key}" if prefix else key, sub))
+        return out
+    return [(prefix, value)]
+
+
 def _diff_parameters(a: MissionRecord, b: MissionRecord) -> list[tuple]:
     rows: list[tuple] = []
     flat_a = _flatten_params(a.ros_graph.parameters)
     flat_b = _flatten_params(b.ros_graph.parameters)
     for node in sorted(set(flat_a) & set(flat_b)):
-        pa, pb = flat_a[node], flat_b[node]
-        for key in sorted(set(pa) | set(pb)):
-            va, vb = pa.get(key), pb.get(key)
+        leaves_a = dict(_leaves("", flat_a[node]))
+        leaves_b = dict(_leaves("", flat_b[node]))
+        for key in sorted(set(leaves_a) | set(leaves_b)):
+            va, vb = leaves_a.get(key), leaves_b.get(key)
             if va != vb:
-                rows.append((f"{node} {key}",
-                             str(va) if key in pa else "",
-                             str(vb) if key in pb else ""))
+                rows.append((f"{node}: {key}",
+                             str(va) if key in leaves_a else "",
+                             str(vb) if key in leaves_b else ""))
     return rows
 
 
