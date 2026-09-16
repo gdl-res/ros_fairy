@@ -2,6 +2,7 @@ import importlib.util
 import io
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -324,6 +325,35 @@ def test_list_shows_missions(fairy_dirs):
     args.operator = "nobody"
     assert list_missions.run(args, console=console) == 0
     assert "No missions found" in console.file.getvalue()
+
+
+def test_list_divides_different_days_with_a_rule(fairy_dirs):
+    import time
+    # Day grouping is inherently local-time-dependent (that's the point —
+    # "same day" means the operator's day); pin TZ so the test is
+    # deterministic regardless of the host's own timezone.
+    old_tz = os.environ.get("TZ")
+    os.environ["TZ"] = "UTC"
+    time.tzset()
+    try:
+        _make_archive(fairy_dirs, created_at="2026-06-10T09:00:00+00:00")
+        _make_archive(fairy_dirs, created_at="2026-06-10T14:00:00+00:00")
+        _make_archive(fairy_dirs, created_at="2026-06-11T09:00:00+00:00")
+
+        console = Console(file=io.StringIO(), width=160, force_terminal=False)
+        args = SimpleNamespace(operator=None, location=None, since=None,
+                               until=None, limit=20, path=False)
+        assert list_missions.run(args, console=console) == 0
+        out = console.file.getvalue()
+        # newest first: 06-11 row, rule (different day), the two 06-10 rows,
+        # no rule between them (same day)
+        assert out.count("├") == 1
+    finally:
+        if old_tz is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = old_tz
+        time.tzset()
 
 
 def test_list_json(fairy_dirs, capsys):
@@ -864,9 +894,11 @@ def test_mission_close_does_not_gate_healthy_mission(fairy_dirs):
 
 # --- export ------------------------------------------------------------------
 
-def _make_archive(fairy_dirs):
+def _make_archive(fairy_dirs, created_at: str | None = None):
     from ros_fairy.archive import assembler
     harvest, context = _spool(fairy_dirs)
+    if created_at:
+        context["identity"]["created_at"] = created_at
     record = builder.build(harvest, context)
     return assembler.assemble(record, harvest)
 
@@ -918,6 +950,113 @@ def test_export_unknown_mission(fairy_dirs):
     args = SimpleNamespace(mission="does-not-exist", output=None, format="zip",
                            force=False, json=False)
     assert export.run(args, console=_console()) == 1
+
+
+def _batch_args(out_dir, **overrides):
+    base = dict(mission=None, all=False, today=False, exclude=None,
+               output=str(out_dir), format="zip", force=False, json=True)
+    base.update(overrides)
+    return SimpleNamespace(**base)
+
+
+def test_export_all_skips_already_exported(fairy_dirs, tmp_path, capsys):
+    crate1 = _make_archive(fairy_dirs, created_at="2026-06-10T09:00:00+00:00")
+    crate2 = _make_archive(fairy_dirs, created_at="2026-06-11T09:00:00+00:00")
+    mission2 = json.loads((crate2 / "mission_record.json").read_text())
+    share = tmp_path / "share"
+    share.mkdir()  # an existing directory is treated as the output folder
+
+    # Export mission 1 individually — it now counts as exported.
+    args1 = SimpleNamespace(mission=str(crate1), output=str(share),
+                            format="zip", force=False, json=False)
+    assert export.run(args1, console=_console()) == 0
+
+    with mock.patch.object(export.Confirm, "ask", return_value=True):
+        assert export.run(_batch_args(share, all=True),
+                          console=_console()) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["exported"] == 1
+    assert data["results"][0]["mission_id"] == mission2["identity"]["mission_id"]
+
+    # Running --all again exports nothing further.
+    with mock.patch.object(export.Confirm, "ask", return_value=True):
+        assert export.run(_batch_args(share, all=True),
+                          console=_console()) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["exported"] == 0
+
+
+def test_export_today_filters_by_date(fairy_dirs, tmp_path, capsys):
+    old_tz = os.environ.get("TZ")
+    os.environ["TZ"] = "UTC"
+    import time
+    time.tzset()
+    try:
+        old_crate = _make_archive(fairy_dirs,
+                                  created_at="2020-01-01T09:00:00+00:00")
+        today_iso = datetime.now(timezone.utc).isoformat()
+        new_crate = _make_archive(fairy_dirs, created_at=today_iso)
+        new_id = json.loads(
+            (new_crate / "mission_record.json").read_text())["identity"][
+                "mission_id"]
+
+        with mock.patch.object(export.Confirm, "ask", return_value=True):
+            assert export.run(_batch_args(tmp_path / "share", today=True),
+                              console=_console()) == 0
+        data = json.loads(capsys.readouterr().out)
+        assert data["exported"] == 1
+        assert data["results"][0]["mission_id"] == new_id
+        assert old_crate.is_dir()  # sanity: fixture used, untouched
+    finally:
+        if old_tz is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = old_tz
+        time.tzset()
+
+
+def test_export_exclude_skips_given_ids(fairy_dirs, tmp_path, capsys):
+    crate1 = _make_archive(fairy_dirs, created_at="2026-06-10T09:00:00+00:00")
+    crate2 = _make_archive(fairy_dirs, created_at="2026-06-11T09:00:00+00:00")
+    id1 = json.loads(
+        (crate1 / "mission_record.json").read_text())["identity"]["mission_id"]
+    id2 = json.loads(
+        (crate2 / "mission_record.json").read_text())["identity"]["mission_id"]
+
+    with mock.patch.object(export.Confirm, "ask", return_value=True):
+        assert export.run(
+            _batch_args(tmp_path / "share", all=True, exclude=[id1]),
+            console=_console()) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["exported"] == 1
+    assert data["results"][0]["mission_id"] == id2
+
+
+def test_export_batch_declines_without_confirmation(fairy_dirs, tmp_path):
+    _make_archive(fairy_dirs)
+    share = tmp_path / "share"
+    with mock.patch.object(export.Confirm, "ask", return_value=False):
+        assert export.run(_batch_args(share, all=True, json=False),
+                          console=_console()) == 0
+    assert not list(share.glob("*.zip"))  # nothing was written
+
+
+def test_export_batch_warns_on_low_disk_space(fairy_dirs, tmp_path):
+    _make_archive(fairy_dirs)
+    share = tmp_path / "share"
+    calls = []
+
+    def fake_ask(prompt, *a, **kw):
+        calls.append(prompt)
+        return False  # decline at the (first) low-space prompt
+
+    with mock.patch.object(export.shutil, "disk_usage",
+                           return_value=SimpleNamespace(total=0, used=0, free=1)), \
+         mock.patch.object(export.Confirm, "ask", side_effect=fake_ask):
+        assert export.run(_batch_args(share, all=True, json=False),
+                          console=_console()) == 1
+    assert any("free" in c for c in calls)
+    assert not list(share.glob("*.zip"))  # nothing was written
 
 
 # --- doctor ------------------------------------------------------------------

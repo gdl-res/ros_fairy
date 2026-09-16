@@ -8,6 +8,7 @@ the database from them at any time.
 import json
 import os
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +58,16 @@ CREATE INDEX IF NOT EXISTS idx_mission_bags_fingerprint
     ON mission_bags(fingerprint);
 CREATE INDEX IF NOT EXISTS idx_mission_bags_mission
     ON mission_bags(mission_id);
+-- One row per mission that `ros2 fairy export` has actually produced a
+-- bundle for — written only after the bundle file exists on disk, so
+-- `export --all` never counts a failed/aborted export as done.
+CREATE TABLE IF NOT EXISTS exports (
+    mission_id  TEXT PRIMARY KEY,
+    exported_at TEXT NOT NULL,
+    bundle_path TEXT NOT NULL,
+    format      TEXT NOT NULL,
+    sha256      TEXT NOT NULL
+);
 """
 
 
@@ -182,6 +193,41 @@ def find_bag_duplicate(fingerprints: list[str],
     finally:
         con.close()
     return dict(row) if row else None
+
+
+def mark_exported(mission_id: str, bundle_path: Path, fmt: str,
+                  sha256: str) -> None:
+    """Record that a bundle was actually written for ``mission_id``.
+
+    Call only after the bundle file exists on disk — this is what
+    ``export --all`` treats as "already exported".
+    """
+    with _connect() as con:
+        con.execute(
+            "INSERT OR REPLACE INTO exports "
+            "(mission_id, exported_at, bundle_path, format, sha256) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (mission_id, datetime.now(timezone.utc).isoformat(),
+             str(bundle_path), fmt, sha256))
+
+
+def exported_mission_ids() -> set[str]:
+    """Every mission_id with at least one recorded successful export."""
+    if not Path(paths.index_db_path()).exists():
+        return set()
+    try:
+        con = _connect()
+    except sqlite3.OperationalError:
+        con = _connect_readonly()
+    try:
+        rows = con.execute("SELECT mission_id FROM exports").fetchall()
+    except sqlite3.OperationalError as exc:
+        if "no such table" in str(exc):
+            return set()
+        raise
+    finally:
+        con.close()
+    return {row[0] for row in rows}
 
 
 def query(operator: str | None = None, location: str | None = None,

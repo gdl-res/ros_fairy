@@ -21,6 +21,15 @@ def _fmt_date(iso: str) -> str:
         return iso
 
 
+def _local_date(iso: str):
+    """The calendar date (in local time) a mission's created_at falls on, or
+    None if it can't be parsed — used only to group same-day rows."""
+    try:
+        return datetime.fromisoformat(iso).astimezone().date()
+    except ValueError:
+        return None
+
+
 _QUALITY_CELL = {
     "degraded": "[yellow]partial[/yellow]",
     "poor": "[red]poor[/red]",
@@ -83,7 +92,7 @@ def run(args, console: Console | None = None) -> int:
     table.add_column("Data")
     if show_path:
         table.add_column("Path")
-    for row in rows:
+    for i, row in enumerate(rows):
         goal = row["goal"]
         if len(goal) > 40:
             goal = goal[:39] + "…"
@@ -100,7 +109,13 @@ def run(args, console: Console | None = None) -> int:
         ]
         if show_path:
             cells.append(row["archive_path"])
-        table.add_row(*cells)
+        # A rule between two rows landing on different calendar days makes a
+        # busy multi-day list scannable at a glance.
+        next_day = _local_date(rows[i + 1]["created_at"]) if i + 1 < len(rows) \
+            else None
+        end_section = next_day is not None and next_day != _local_date(
+            row["created_at"])
+        table.add_row(*cells, end_section=end_section)
     console.print(table)
     if total > len(rows):
         console.print(f"Showing {len(rows)} of {total} missions")

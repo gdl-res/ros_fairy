@@ -378,6 +378,25 @@ def test_index_query_missing_db_is_empty(fairy_dirs):
     assert index.query() == ([], 0)
 
 
+def test_exported_mission_ids_missing_db_is_empty(fairy_dirs):
+    assert index.exported_mission_ids() == set()
+
+
+def test_mark_exported_tracks_and_persists(fairy_dirs, tmp_path):
+    harvest, context = _spool(fairy_dirs)
+    record = builder.build(harvest, context)
+    index.insert(record, paths.archive_dir() / "x")
+
+    assert record.identity.mission_id not in index.exported_mission_ids()
+    bundle = tmp_path / "m.zip"
+    index.mark_exported(record.identity.mission_id, bundle, "zip", "abc123")
+    assert index.exported_mission_ids() == {record.identity.mission_id}
+
+    # Re-marking (e.g. a later --force re-export) just replaces the row.
+    index.mark_exported(record.identity.mission_id, bundle, "zip", "def456")
+    assert index.exported_mission_ids() == {record.identity.mission_id}
+
+
 def test_index_query_reads_readonly_db(fairy_dirs):
     # An account that can read but not write the index (not in the ros-fairy
     # group but db/dir readable) must still be able to list missions.
